@@ -3,71 +3,1193 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="dark light">
 <title>Markets Monitor</title>
 <style>
-body{margin:0;background:#0b0f16;color:#e5e9f0;font-family:-apple-system,sans-serif}
-header{padding:14px 16px 8px;border-bottom:1px solid #252d3c}
-.kicker{color:#8b95a7;font-size:10px;letter-spacing:1.5px;text-transform:uppercase}
-h1{margin:4px 0 0;font-size:22px}
-.nav{display:none;align-items:center;justify-content:space-between;gap:8px;padding:10px 16px}
-.nav button{min-height:36px;padding:6px 12px;border:1px solid #364157;border-radius:6px;background:#0d131d;color:#e5e9f0}
-.grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;padding:12px}
-.panel{border:1px solid #252d3c;border-radius:10px;overflow:hidden;background:#111722}
-.label{padding:8px 10px;color:#8b95a7;font-size:11px}
-.chart{height:42vh;min-height:280px}
-@media(max-width:760px){
- .grid{grid-template-columns:1fr;padding:8px 12px 16px}
- .nav{display:flex}
- .panel{display:none}
- .panel.on{display:block}
- .chart{height:64vh}
-}
+  :root,
+  [data-theme="dark"] {
+    --bg: #0b0f16;
+    --panel: #111722;
+    --panel-deep: #0d131d;
+    --panel-hover: #151c28;
+    --border: #252d3c;
+    --border-strong: #364157;
+    --text: #e5e9f0;
+    --muted: #8b95a7;
+    --faint: #5f6a7d;
+    --accent: #4f7cff;
+    --accent-soft: rgba(79, 124, 255, 0.16);
+    --good: #45bd84;
+    --bad: #ef6a70;
+    --radius: 10px;
+    --gap: 14px;
+    --shadow: 0 16px 38px rgba(0, 0, 0, 0.18);
+  }
+
+  [data-theme="light"] {
+    --bg: #eef1f6;
+    --panel: #ffffff;
+    --panel-deep: #f4f6fa;
+    --panel-hover: #ebeff6;
+    --border: #d5dbe6;
+    --border-strong: #b7c0d0;
+    --text: #1b2330;
+    --muted: #5b6576;
+    --faint: #7a8494;
+    --accent: #2f5fff;
+    --accent-soft: rgba(47, 95, 255, 0.12);
+    --good: #1f9a62;
+    --bad: #d23b44;
+    --shadow: 0 12px 28px rgba(28, 39, 58, 0.08);
+  }
+
+  * { box-sizing: border-box; }
+  html { min-width: 320px; background: var(--bg); }
+  body {
+    min-height: 100vh;
+    min-height: 100dvh;
+    margin: 0;
+    padding: 18px 22px 28px;
+    background:
+      radial-gradient(circle at 15% -10%, rgba(79, 124, 255, 0.08), transparent 34rem),
+      var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  button, select, input { font: inherit; color: var(--text); }
+  button { -webkit-tap-highlight-color: transparent; }
+
+  .shell { width: min(100%, 1800px); margin: 0 auto; }
+  .skip-link {
+    position: fixed; top: 8px; left: 8px; z-index: 9999;
+    padding: 8px 11px; border-radius: 6px; background: var(--text); color: var(--bg);
+    transform: translateY(-160%);
+  }
+  .skip-link:focus { transform: translateY(0); }
+
+  .app-header {
+    display: flex; align-items: flex-end; justify-content: space-between;
+    gap: 24px; padding: 1px 2px 14px; border-bottom: 1px solid var(--border);
+  }
+  .brand-kicker {
+    display: block; margin-bottom: 4px; color: var(--muted);
+    font-size: 10px; font-weight: 700; letter-spacing: 1.5px; text-transform: uppercase;
+  }
+  h1 { margin: 0; font-size: clamp(21px, 2.2vw, 28px); font-weight: 650; letter-spacing: -0.35px; }
+
+  .clocks { display: flex; align-items: center; justify-content: flex-end; gap: 18px; }
+  .clock-block { text-align: right; }
+  .clock-label {
+    display: block; margin-bottom: 2px; color: var(--faint);
+    font-size: 9px; font-weight: 700; letter-spacing: 1.15px; text-transform: uppercase;
+  }
+  .clock-value { display: block; color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+
+  .toolbar { display: flex; align-items: center; gap: 9px; min-height: 51px; padding: 9px 0; flex-wrap: wrap; }
+  .toolbar-spacer { flex: 1; }
+  .field { display: inline-flex; align-items: center; gap: 7px; }
+  .field-label { color: var(--muted); font-size: 11px; font-weight: 650; }
+
+  select, .button, .icon-button, input[type="text"] {
+    border: 1px solid var(--border); background: var(--panel-deep);
+    transition: border-color 120ms ease, background-color 120ms ease, color 120ms ease;
+  }
+  select, input[type="text"] {
+    min-height: 34px; padding: 5px 9px; border-radius: 6px;
+  }
+  select { padding-right: 28px; cursor: pointer; }
+  select:hover, .button:hover, .icon-button:hover, input[type="text"]:hover {
+    border-color: var(--border-strong); background: var(--panel-hover);
+  }
+  select:focus-visible, .button:focus-visible, .icon-button:focus-visible, input:focus-visible {
+    outline: 2px solid var(--accent); outline-offset: 2px;
+  }
+  .button {
+    min-height: 34px; padding: 6px 10px; border-radius: 6px;
+    color: var(--muted); font-size: 12px; font-weight: 600; cursor: pointer;
+  }
+  .button:hover { color: var(--text); }
+  .button.primary { color: var(--text); border-color: var(--accent); background: var(--accent-soft); }
+
+  .switch {
+    display: inline-flex; align-items: center; gap: 8px; min-height: 34px;
+    padding: 0 9px; border: 1px solid var(--border); border-radius: 6px;
+    background: var(--panel-deep); color: var(--muted); font-size: 12px; font-weight: 600; cursor: pointer;
+  }
+  .switch input { position: absolute; opacity: 0; pointer-events: none; }
+  .switch-track {
+    position: relative; width: 28px; height: 16px; flex: 0 0 auto;
+    border: 1px solid var(--border-strong); border-radius: 999px; background: #202838;
+  }
+  [data-theme="light"] .switch-track { background: #d9deea; }
+  .switch-track::after {
+    content: ""; position: absolute; top: 2px; left: 2px; width: 10px; height: 10px;
+    border-radius: 50%; background: var(--muted);
+    transition: transform 140ms ease, background-color 140ms ease;
+  }
+  .switch input:checked + .switch-track { border-color: var(--accent); background: var(--accent-soft); }
+  .switch input:checked + .switch-track::after { background: var(--accent); transform: translateX(12px); }
+
+  .connection { display: inline-flex; align-items: center; gap: 6px; color: var(--faint); font-size: 11px; }
+  .connection-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--good); box-shadow: 0 0 0 3px rgba(69, 189, 132, 0.10); }
+  .connection.offline { color: var(--bad); }
+  .connection.offline .connection-dot { background: var(--bad); box-shadow: 0 0 0 3px rgba(239, 106, 112, 0.10); }
+
+  .add-bar {
+    display: none; align-items: center; gap: 8px; flex-wrap: wrap;
+    padding: 0 0 10px;
+  }
+  .add-bar.is-open { display: flex; }
+  .add-bar input[type="text"] { width: min(220px, 42vw); }
+  .hint { color: var(--faint); font-size: 11px; }
+
+  .dashboard { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--gap); }
+  .dashboard.is-stacked { grid-template-columns: minmax(0, 1fr); }
+
+  .panel {
+    display: flex; min-width: 0; min-height: 390px;
+    height: clamp(390px, calc((100dvh - 230px) / 2), 620px);
+    flex-direction: column; overflow: hidden;
+    border: 1px solid var(--border); border-radius: var(--radius);
+    background: var(--panel); box-shadow: var(--shadow);
+  }
+  .dashboard.is-stacked .panel { height: min(70dvh, 720px); }
+  .panel:fullscreen { width: 100vw; height: 100vh; border: 0; border-radius: 0; }
+  .panel.is-focused {
+    position: fixed; inset: 10px; z-index: 1000; height: auto;
+    border-color: var(--border-strong);
+  }
+  body.has-focused-panel { overflow: hidden; }
+
+  .panel-head {
+    display: grid; grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center; gap: 12px; min-height: 59px;
+    padding: 9px 10px 9px 12px; border-bottom: 1px solid var(--border);
+  }
+  .panel-label {
+    display: block; margin-bottom: 3px; color: var(--faint);
+    font-size: 9px; font-weight: 750; letter-spacing: 1.25px; text-transform: uppercase;
+  }
+  .panel-title {
+    display: block; overflow: hidden; color: var(--text);
+    font-size: 14px; font-weight: 650; line-height: 1.2;
+    text-overflow: ellipsis; white-space: nowrap;
+  }
+  .panel-meta {
+    margin-top: 3px; color: var(--faint); font-size: 10px;
+    font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .panel-controls { display: flex; align-items: center; justify-content: flex-end; gap: 6px; min-width: 0; }
+  .instrument-select { width: clamp(150px, 18vw, 230px); max-width: 100%; font-size: 12px; }
+
+  .icon-button {
+    display: inline-grid; width: 34px; height: 34px; flex: 0 0 34px;
+    place-items: center; padding: 0; border-radius: 6px; color: var(--muted); cursor: pointer;
+  }
+  .icon-button:hover { color: var(--text); }
+  .icon-button svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-linecap: round; stroke-linejoin: round; stroke-width: 1.7; }
+
+  .chart-stage { position: relative; min-height: 0; flex: 1; background: var(--panel-deep); }
+  .chart { position: absolute; inset: 0; width: 100%; height: 100%; }
+  .chart-status {
+    position: absolute; inset: 0; z-index: 3; display: grid; place-content: center;
+    justify-items: center; gap: 10px; padding: 24px; background: var(--panel-deep);
+    color: var(--muted); text-align: center; font-size: 12px;
+  }
+  .chart-status[hidden] { display: none; }
+  .spinner {
+    width: 20px; height: 20px; border: 2px solid var(--border-strong);
+    border-top-color: var(--accent); border-radius: 50%; animation: spin 800ms linear infinite;
+  }
+  .status-actions { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; }
+  .status-action {
+    min-height: 32px; padding: 5px 10px; border: 1px solid var(--border-strong);
+    border-radius: 6px; background: var(--panel); color: var(--text);
+    font-size: 12px; font-weight: 600; cursor: pointer; text-decoration: none;
+  }
+  .status-detail { max-width: 360px; color: var(--faint); line-height: 1.45; }
+
+  .mobile-nav { display: none; align-items: center; justify-content: space-between; gap: 8px; padding: 0 0 10px; }
+  .help-card {
+    display: none; margin: 0 0 12px; padding: 10px 12px;
+    border: 1px solid var(--border); border-radius: 8px; background: var(--panel);
+    color: var(--muted); font-size: 12px; line-height: 1.5;
+  }
+  .help-card.is-open { display: block; }
+  .help-card kbd {
+    display: inline-block; padding: 1px 5px; border: 1px solid var(--border);
+    border-radius: 4px; background: var(--panel-deep); font-size: 11px;
+  }
+
+  .noscript { margin: 14px 0; padding: 12px; border: 1px solid var(--bad); border-radius: 8px; color: var(--bad); }
+  footer {
+    display: flex; align-items: center; justify-content: space-between; gap: 16px;
+    padding: 13px 2px 0; color: var(--faint); font-size: 10px; line-height: 1.45;
+  }
+  .sr-only {
+    position: absolute !important; width: 1px !important; height: 1px !important;
+    padding: 0 !important; margin: -1px !important; overflow: hidden !important;
+    clip: rect(0,0,0,0) !important; white-space: nowrap !important; border: 0 !important;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  @media (max-width: 1100px) {
+    .panel-head { grid-template-columns: minmax(0, 1fr); gap: 8px; }
+    .panel-controls { justify-content: stretch; }
+    .instrument-select { width: auto; flex: 1; }
+  }
+  @media (max-width: 760px) {
+    body { padding: 13px 13px 24px; }
+    .app-header { align-items: flex-start; gap: 14px; }
+    .clocks { flex-direction: column; align-items: flex-end; gap: 5px; }
+    .toolbar { flex-wrap: wrap; }
+    .toolbar-spacer, .layout-button { display: none; }
+    .connection { margin-left: auto; }
+    .dashboard, .dashboard.is-stacked { grid-template-columns: minmax(0, 1fr); }
+    .panel, .dashboard.is-stacked .panel { min-height: 430px; height: 62dvh; max-height: 720px; }
+    .mobile-nav { display: flex; }
+    body.is-phone-focus .panel { display: none; }
+    body.is-phone-focus .panel.is-phone-active {
+      display: flex; height: min(72dvh, 760px); max-height: none;
+    }
+    footer { align-items: flex-start; flex-direction: column; gap: 4px; }
+  }
+  @media (max-width: 480px) {
+    .app-header { display: block; }
+    .clocks { margin-top: 10px; flex-direction: row; justify-content: space-between; }
+    .clock-block { text-align: left; }
+    .clock-block:last-child { text-align: right; }
+    .field-label { display: none; }
+    .switch-text-full { display: none; }
+    .switch-text-short { display: inline; }
+  }
+  .switch-text-short { display: none; }
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+      transition-duration: 0.01ms !important;
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+    }
+  }
 </style>
 </head>
 <body>
-<header>
-  <div class="kicker">Jezza's Dashboard</div>
-  <h1>Markets Monitor</h1>
-</header>
-<div class="nav">
-  <button id="prev" type="button">Prev</button>
-  <strong id="title">Markets</strong>
-  <button id="next" type="button">Next</button>
+<a class="skip-link" href="#dashboard">Skip to charts</a>
+
+<div class="shell">
+  <header class="app-header">
+    <div>
+      <span class="brand-kicker">Jezza's Dashboard</span>
+      <h1>Markets Monitor</h1>
+    </div>
+    <div class="clocks" aria-label="Current time">
+      <div class="clock-block">
+        <span class="clock-label">Geneva</span>
+        <time class="clock-value" id="genevaClock"></time>
+      </div>
+      <div class="clock-block">
+        <span class="clock-label">UTC</span>
+        <time class="clock-value" id="utcClock"></time>
+      </div>
+    </div>
+  </header>
+
+  <div class="toolbar" aria-label="Dashboard controls">
+    <label class="field" for="intervalSelect">
+      <span class="field-label">Interval</span>
+      <select id="intervalSelect">
+        <option value="60">1 hour</option>
+        <option value="240">4 hour</option>
+        <option value="D" selected>Daily</option>
+        <option value="W">Weekly</option>
+        <option value="M">Monthly</option>
+      </select>
+    </label>
+
+    <label class="field" for="studiesSelect">
+      <span class="field-label">Studies</span>
+      <select id="studiesSelect">
+        <option value="none">None</option>
+        <option value="ma" selected>50 / 100 / 200 MA</option>
+        <option value="vol">Volume</option>
+        <option value="rsi">RSI 14</option>
+        <option value="ma-vol">MA + Volume</option>
+        <option value="ma-rsi">MA + RSI</option>
+      </select>
+    </label>
+
+    <button class="button layout-button" id="layoutButton" type="button">Stack view</button>
+    <button class="button" id="addSymbolButton" type="button">Add symbol</button>
+    <button class="button" id="themeButton" type="button">Light</button>
+    <button class="button" id="helpButton" type="button">Keys</button>
+    <button class="button" id="refreshButton" type="button">Refresh all</button>
+    <button class="button" id="resetButton" type="button">Reset</button>
+
+    <span class="toolbar-spacer" aria-hidden="true"></span>
+    <span class="connection" id="connectionStatus" role="status" aria-live="polite">
+      <span class="connection-dot" aria-hidden="true"></span>
+      <span id="connectionText">Browser online</span>
+    </span>
+  </div>
+
+  <div class="add-bar" id="addBar">
+    <label class="field" for="addPanelSelect">
+      <span class="field-label">Panel</span>
+      <select id="addPanelSelect"></select>
+    </label>
+    <input id="addNameInput" type="text" placeholder="Label (US 10Y)" autocomplete="off">
+    <input id="addSymbolInput" type="text" placeholder="EXCHANGE:SYMBOL" autocomplete="off" spellcheck="false">
+    <button class="button primary" id="addConfirmButton" type="button">Add</button>
+    <span class="hint">Use widget-safe symbols (OANDA:, TVC:). FRED and most ECONOMICS series are blocked in embeds.</span>
+  </div>
+
+  <div class="help-card" id="helpCard">
+    <kbd>R</kbd> refresh all · <kbd>1</kbd>–<kbd>4</kbd> focus panel · <kbd>Esc</kbd> exit focus ·
+    <kbd>T</kbd> theme · <kbd>S</kbd> stack/grid · <kbd>?</kbd> this help ·
+    Compare two series with a spread symbol such as <code>TVC:US10Y-TVC:US02Y</code>.
+  </div>
+
+  <div class="mobile-nav" id="mobileNav">
+    <button class="button" id="prevPanelButton" type="button">Prev</button>
+    <strong id="mobilePanelLabel">Markets</strong>
+    <button class="button" id="nextPanelButton" type="button">Next</button>
+  </div>
+
+  <noscript><div class="noscript">JavaScript is required to load the market charts.</div></noscript>
+  <main class="dashboard" id="dashboard" aria-label="Market charts"></main>
+  <footer>
+    <span>Selections, interval, studies, theme and layout are saved in this browser.</span>
+    <span>FRED series cannot be shown in TradingView widgets. Yields use TVC symbols. Data delay varies by venue.</span>
+  </footer>
 </div>
-<div class="grid" id="grid"></div>
-<script src="https://s3.tradingview.com/tv.js"></script>
+
+<div class="sr-only" id="appStatus" role="status" aria-live="polite"></div>
+
 <script>
-const PANELS=[
-  ['Markets','OANDA:SPX500USD'],
-  ['Gold','OANDA:XAUUSD'],
-  ['FX','OANDA:EURCHF'],
-  ['US 10Y','TVC:US10Y']
-];
-let i=0;
-const grid=document.getElementById('grid');
-PANELS.forEach((p,n)=>{
-  const box=document.createElement('section');
-  box.className='panel'+(n===0?' on':'');
-  box.id='p'+n;
-  box.innerHTML='<div class="label">'+p[0]+'</div><div class="chart" id="c'+n+'"></div>';
-  grid.appendChild(box);
-});
-function show(n){
-  i=(n+PANELS.length)%PANELS.length;
-  document.querySelectorAll('.panel').forEach((el,idx)=>el.classList.toggle('on',idx===i));
-  document.getElementById('title').textContent=PANELS[i][0];
-}
-document.getElementById('prev').onclick=()=>show(i-1);
-document.getElementById('next').onclick=()=>show(i+1);
-function boot(){
-  if(!window.TradingView){setTimeout(boot,200);return;}
-  PANELS.forEach((p,n)=>new TradingView.widget({
-    autosize:true,symbol:p[1],interval:'D',timezone:'Europe/Zurich',theme:'dark',
-    style:'1',locale:'en',hide_side_toolbar:true,allow_symbol_change:true,
-    container_id:'c'+n,support_host:'https://www.tradingview.com'
-  }));
-}
-boot();
+  "use strict";
+
+  /*
+   * EDIT THIS LIST to add, remove or reorder built-in instruments.
+   * Widget rule: FRED:* and most ECONOMICS:* series are blocked in embeds
+   * ("This symbol is only available on TradingView"). Use TVC / OANDA instead.
+   */
+  const PANELS = [
+    {
+      id: "markets",
+      label: "Markets",
+      options: [
+        ["S&P 500", "OANDA:SPX500USD"],
+        ["Nasdaq 100", "OANDA:NAS100USD"],
+        ["Dow Jones", "OANDA:US30USD"],
+        ["FTSE 100", "OANDA:UK100GBP"],
+        ["DAX", "OANDA:DE30EUR"],
+        ["Euro Stoxx 50", "OANDA:EU50EUR"],
+        ["SMI (Swiss)", "OANDA:CH20CHF"],
+        ["Nikkei 225", "OANDA:JP225USD"],
+        ["Hang Seng", "OANDA:HK33HKD"],
+        ["ASX 200", "OANDA:AU200AUD"]
+      ]
+    },
+    {
+      id: "commodities",
+      label: "Commodities",
+      options: [
+        ["Brent Crude", "OANDA:BCOUSD"],
+        ["WTI Crude", "OANDA:WTICOUSD"],
+        ["Natural Gas", "OANDA:NATGASUSD"],
+        ["Gold", "OANDA:XAUUSD"],
+        ["Silver", "OANDA:XAGUSD"],
+        ["Copper", "OANDA:XCUUSD"],
+        ["Platinum", "OANDA:XPTUSD"],
+        ["Palladium", "OANDA:XPDUSD"],
+        ["Corn", "OANDA:CORNUSD"],
+        ["Wheat", "OANDA:WHEATUSD"]
+      ]
+    },
+    {
+      id: "fx",
+      label: "FX",
+      options: [
+        ["EUR / CHF", "OANDA:EURCHF"],
+        ["USD / CHF", "OANDA:USDCHF"],
+        ["GBP / CHF", "OANDA:GBPCHF"],
+        ["EUR / USD", "OANDA:EURUSD"],
+        ["GBP / USD", "OANDA:GBPUSD"],
+        ["USD / JPY", "OANDA:USDJPY"],
+        ["EUR / GBP", "OANDA:EURGBP"],
+        ["USD / CNH", "OANDA:USDCNH"],
+        ["AUD / USD", "OANDA:AUDUSD"],
+        ["Dollar Index", "TVC:DXY"]
+      ]
+    },
+    {
+      id: "rates",
+      label: "Interest Rates",
+      options: [
+        ["US 10Y", "TVC:US10Y"],
+        ["US 2Y", "TVC:US02Y"],
+        ["US 30Y", "TVC:US30Y"],
+        ["US 5Y", "TVC:US05Y"],
+        ["US 3M", "TVC:US03MY"],
+        ["10Y − 2Y spread", "TVC:US10Y-TVC:US02Y"],
+        ["German 10Y", "TVC:DE10Y"],
+        ["UK 10Y", "TVC:GB10Y"],
+        ["Swiss 10Y", "TVC:CH10Y"]
+      ]
+    }
+  ];
+
+  const STORAGE_KEY = "markets-monitor:v3";
+  const VALID_INTERVALS = new Set(["60", "240", "D", "W", "M"]);
+  const VALID_STUDIES = new Set(["none", "ma", "vol", "rsi", "ma-vol", "ma-rsi"]);
+  const BLOCKED_PREFIXES = ["FRED:", "ECONOMICS:"];
+  const ICONS = {
+    refresh: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6v5h-5"></path><path d="M18.1 9a7 7 0 1 0 .4 6"></path></svg>',
+    fullscreen: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 3H3v5"></path><path d="M16 3h5v5"></path><path d="M8 21H3v-5"></path><path d="M16 21h5v-5"></path></svg>',
+    open: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 5h5v5"></path><path d="M10 14 19 5"></path><path d="M19 13v6H5V5h6"></path></svg>'
+  };
+
+  const DEFAULT_STATE = Object.freeze({
+    interval: "D",
+    studies: "ma",
+    layout: "grid",
+    theme: "dark",
+    phoneIndex: 0,
+    selections: Object.fromEntries(PANELS.map((panel) => [panel.id, panel.options[0][1]])),
+    customOptions: Object.fromEntries(PANELS.map((panel) => [panel.id, []]))
+  });
+
+  const runtime = Object.fromEntries(PANELS.map((panel) => [panel.id, {
+    version: 0,
+    visible: false,
+    hasRendered: false,
+    observer: null,
+    readyTimer: null,
+    error: false,
+    loadedAt: null
+  }]));
+
+  let state = loadState();
+  let tradingViewPromise = null;
+  let intersectionObserver = null;
+  let clockTimer = null;
+
+  const dashboard = document.getElementById("dashboard");
+  const intervalSelect = document.getElementById("intervalSelect");
+  const studiesSelect = document.getElementById("studiesSelect");
+  const layoutButton = document.getElementById("layoutButton");
+  const themeButton = document.getElementById("themeButton");
+  const helpButton = document.getElementById("helpButton");
+  const addSymbolButton = document.getElementById("addSymbolButton");
+  const refreshButton = document.getElementById("refreshButton");
+  const resetButton = document.getElementById("resetButton");
+  const appStatus = document.getElementById("appStatus");
+  const addBar = document.getElementById("addBar");
+  const addPanelSelect = document.getElementById("addPanelSelect");
+  const addNameInput = document.getElementById("addNameInput");
+  const addSymbolInput = document.getElementById("addSymbolInput");
+  const helpCard = document.getElementById("helpCard");
+
+  function cloneDefaults() {
+    return {
+      interval: DEFAULT_STATE.interval,
+      studies: DEFAULT_STATE.studies,
+      layout: DEFAULT_STATE.layout,
+      theme: DEFAULT_STATE.theme,
+      phoneIndex: 0,
+      selections: { ...DEFAULT_STATE.selections },
+      customOptions: Object.fromEntries(PANELS.map((panel) => [panel.id, []]))
+    };
+  }
+
+  function migrateLegacySymbol(symbol) {
+    const map = {
+      "FRED:DGS10": "TVC:US10Y",
+      "FRED:DGS2": "TVC:US02Y",
+      "FRED:DGS30": "TVC:US30Y",
+      "FRED:DGS3MO": "TVC:US03MY",
+      "FRED:T10Y2Y": "TVC:US10Y-TVC:US02Y",
+      "FRED:FEDFUNDS": "TVC:US03MY",
+      "FRED:DFII10": "TVC:US10Y"
+    };
+    return map[symbol] || symbol;
+  }
+
+  function loadState() {
+    const clean = cloneDefaults();
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY) || localStorage.getItem("markets-monitor:v2");
+      const saved = JSON.parse(raw || "null");
+      if (!saved || typeof saved !== "object") return clean;
+
+      if (VALID_INTERVALS.has(saved.interval)) clean.interval = saved.interval;
+      if (VALID_STUDIES.has(saved.studies)) clean.studies = saved.studies;
+      else if (saved.showMAs === false) clean.studies = "none";
+      if (saved.layout === "grid" || saved.layout === "stack") clean.layout = saved.layout;
+      if (saved.theme === "light" || saved.theme === "dark") clean.theme = saved.theme;
+      if (Number.isInteger(saved.phoneIndex)) clean.phoneIndex = saved.phoneIndex;
+
+      if (saved.customOptions && typeof saved.customOptions === "object") {
+        PANELS.forEach((panel) => {
+          const list = saved.customOptions[panel.id];
+          if (Array.isArray(list)) {
+            clean.customOptions[panel.id] = list.filter((item) => Array.isArray(item) && item.length === 2);
+          }
+        });
+      }
+
+      if (saved.selections && typeof saved.selections === "object") {
+        PANELS.forEach((panel) => {
+          const candidate = migrateLegacySymbol(saved.selections[panel.id]);
+          if (allOptions(panel.id).some((option) => option[1] === candidate)) {
+            clean.selections[panel.id] = candidate;
+          }
+        });
+      }
+    } catch (error) {
+      // Storage may be unavailable.
+    }
+    return clean;
+  }
+
+  function saveState() {
+    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); } catch (error) {}
+  }
+
+  function announce(message) {
+    appStatus.textContent = "";
+    window.setTimeout(() => { appStatus.textContent = message; }, 20);
+  }
+
+  function findPanel(panelId) {
+    return PANELS.find((panel) => panel.id === panelId);
+  }
+
+  function allOptions(panelId) {
+    const panel = findPanel(panelId);
+    return panel.options.concat(state.customOptions[panelId] || []);
+  }
+
+  function selectedName(panelId) {
+    const symbol = state.selections[panelId];
+    const match = allOptions(panelId).find((option) => option[1] === symbol);
+    return match ? match[0] : symbol;
+  }
+
+  function tvUrl(symbol) {
+    return "https://www.tradingview.com/chart/?symbol=" + encodeURIComponent(symbol);
+  }
+
+  function isBlockedSymbol(symbol) {
+    const upper = String(symbol || "").toUpperCase();
+    return BLOCKED_PREFIXES.some((prefix) => upper.startsWith(prefix));
+  }
+
+  function formatClockTime(date) {
+    return new Intl.DateTimeFormat("en-GB", {
+      hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false, timeZone: "Europe/Zurich"
+    }).format(date);
+  }
+
+  function makeIconButton(action, label, icon) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "icon-button";
+    button.dataset.action = action;
+    button.setAttribute("aria-label", label);
+    button.title = label;
+    button.innerHTML = icon;
+    return button;
+  }
+
+  function rebuildSelect(panelId) {
+    const select = document.getElementById("select_" + panelId);
+    if (!select) return;
+    const current = state.selections[panelId];
+    select.replaceChildren();
+    allOptions(panelId).forEach(([name, symbol]) => {
+      select.add(new Option(name, symbol, false, symbol === current));
+    });
+  }
+
+  function buildPanels() {
+    const fragment = document.createDocumentFragment();
+    addPanelSelect.replaceChildren();
+
+    PANELS.forEach((panelConfig) => {
+      addPanelSelect.add(new Option(panelConfig.label, panelConfig.id));
+
+      const panel = document.createElement("section");
+      panel.className = "panel";
+      panel.id = "panel_" + panelConfig.id;
+      panel.dataset.panelId = panelConfig.id;
+      panel.setAttribute("aria-labelledby", "title_" + panelConfig.id);
+
+      const head = document.createElement("div");
+      head.className = "panel-head";
+
+      const heading = document.createElement("div");
+      heading.className = "panel-heading";
+
+      const label = document.createElement("span");
+      label.className = "panel-label";
+      label.textContent = panelConfig.label;
+
+      const title = document.createElement("strong");
+      title.className = "panel-title";
+      title.id = "title_" + panelConfig.id;
+      title.textContent = selectedName(panelConfig.id);
+
+      const meta = document.createElement("div");
+      meta.className = "panel-meta";
+      meta.id = "meta_" + panelConfig.id;
+      meta.textContent = state.selections[panelConfig.id] + " · not loaded";
+
+      heading.append(label, title, meta);
+
+      const controls = document.createElement("div");
+      controls.className = "panel-controls";
+
+      const selectLabel = document.createElement("label");
+      selectLabel.className = "sr-only";
+      selectLabel.htmlFor = "select_" + panelConfig.id;
+      selectLabel.textContent = "Choose instrument for " + panelConfig.label;
+
+      const select = document.createElement("select");
+      select.className = "instrument-select";
+      select.id = "select_" + panelConfig.id;
+      select.dataset.panelId = panelConfig.id;
+
+      const reload = makeIconButton("reload", "Reload " + panelConfig.label + " chart", ICONS.refresh);
+      const open = makeIconButton("open", "Open " + panelConfig.label + " on TradingView", ICONS.open);
+      const fullscreen = makeIconButton("fullscreen", "Open " + panelConfig.label + " chart full screen", ICONS.fullscreen);
+
+      controls.append(selectLabel, select, reload, open, fullscreen);
+      head.append(heading, controls);
+
+      const stage = document.createElement("div");
+      stage.className = "chart-stage";
+      const chart = document.createElement("div");
+      chart.className = "chart";
+      chart.id = "chart_" + panelConfig.id;
+      const status = document.createElement("div");
+      status.className = "chart-status";
+      status.id = "status_" + panelConfig.id;
+      status.setAttribute("role", "status");
+      stage.append(chart, status);
+      panel.append(head, stage);
+      fragment.append(panel);
+    });
+
+    dashboard.replaceChildren(fragment);
+    PANELS.forEach((panel) => {
+      rebuildSelect(panel.id);
+      setPanelStatus(panel.id, "waiting", "Scroll to load this chart.");
+    });
+  }
+
+  function updatePanelMeta(panelId, extra) {
+    const meta = document.getElementById("meta_" + panelId);
+    if (!meta) return;
+    const symbol = state.selections[panelId];
+    const loaded = runtime[panelId].loadedAt ? "loaded " + formatClockTime(runtime[panelId].loadedAt) : "not loaded";
+    meta.textContent = [symbol, extra || loaded].join(" · ");
+  }
+
+  function setPanelStatus(panelId, mode, message, detail) {
+    const status = document.getElementById("status_" + panelId);
+    if (!status) return;
+    const symbol = state.selections[panelId];
+
+    if (mode === "ready") {
+      status.hidden = true;
+      status.replaceChildren();
+      updatePanelMeta(panelId);
+      return;
+    }
+
+    status.hidden = false;
+    status.replaceChildren();
+
+    if (mode === "loading") {
+      const spinner = document.createElement("span");
+      spinner.className = "spinner";
+      spinner.setAttribute("aria-hidden", "true");
+      status.append(spinner);
+    }
+
+    const text = document.createElement("span");
+    text.textContent = message;
+    status.append(text);
+
+    if (detail) {
+      const detailNode = document.createElement("span");
+      detailNode.className = "status-detail";
+      detailNode.textContent = detail;
+      status.append(detailNode);
+    }
+
+    if (mode === "error" || mode === "blocked") {
+      const actions = document.createElement("div");
+      actions.className = "status-actions";
+
+      const retry = document.createElement("button");
+      retry.type = "button";
+      retry.className = "status-action";
+      retry.textContent = "Retry";
+      retry.addEventListener("click", () => renderPanel(panelId, true));
+
+      const open = document.createElement("a");
+      open.className = "status-action";
+      open.href = tvUrl(symbol);
+      open.target = "_blank";
+      open.rel = "noopener noreferrer";
+      open.textContent = "Open on TradingView";
+
+      actions.append(retry, open);
+      status.append(actions);
+    }
+
+    updatePanelMeta(panelId, mode === "error" || mode === "blocked" ? "blocked / failed" : mode);
+  }
+
+  function cleanupRuntime(panelId) {
+    const item = runtime[panelId];
+    if (item.observer) { item.observer.disconnect(); item.observer = null; }
+    if (item.readyTimer) { window.clearTimeout(item.readyTimer); item.readyTimer = null; }
+  }
+
+  function loadTradingView() {
+    if (window.TradingView && typeof window.TradingView.widget === "function") {
+      return Promise.resolve(window.TradingView);
+    }
+    if (!navigator.onLine) return Promise.reject(new Error("The browser is offline."));
+    if (tradingViewPromise) return tradingViewPromise;
+
+    tradingViewPromise = new Promise((resolve, reject) => {
+      const previous = document.getElementById("tradingview-library");
+      if (previous) previous.remove();
+
+      const script = document.createElement("script");
+      script.id = "tradingview-library";
+      script.src = "https://s3.tradingview.com/tv.js";
+      script.async = true;
+
+      const timer = window.setTimeout(() => {
+        script.remove();
+        tradingViewPromise = null;
+        reject(new Error("TradingView took too long to respond."));
+      }, 15000);
+
+      script.addEventListener("load", () => {
+        window.clearTimeout(timer);
+        if (window.TradingView && typeof window.TradingView.widget === "function") {
+          resolve(window.TradingView);
+        } else {
+          tradingViewPromise = null;
+          reject(new Error("TradingView loaded without its chart library."));
+        }
+      }, { once: true });
+
+      script.addEventListener("error", () => {
+        window.clearTimeout(timer);
+        tradingViewPromise = null;
+        reject(new Error("The TradingView library could not be loaded."));
+      }, { once: true });
+
+      document.head.append(script);
+    });
+
+    return tradingViewPromise;
+  }
+
+  function studiesForState() {
+    const studies = [];
+    if (state.studies.includes("ma")) {
+      studies.push(
+        { id: "MASimple@tv-basicstudies", inputs: { length: 50 } },
+        { id: "MASimple@tv-basicstudies", inputs: { length: 100 } },
+        { id: "MASimple@tv-basicstudies", inputs: { length: 200 } }
+      );
+    }
+    if (state.studies.includes("vol")) studies.push({ id: "Volume@tv-basicstudies" });
+    if (state.studies.includes("rsi")) studies.push({ id: "RSI@tv-basicstudies", inputs: { length: 14 } });
+    return studies;
+  }
+
+  function widgetConfig(panelId) {
+    return {
+      autosize: true,
+      symbol: state.selections[panelId],
+      interval: state.interval,
+      timezone: "Europe/Zurich",
+      theme: state.theme,
+      style: "1",
+      locale: "en",
+      toolbar_bg: state.theme === "light" ? "#f4f6fa" : "#111722",
+      backgroundColor: state.theme === "light" ? "#f4f6fa" : "#0d131d",
+      enable_publishing: false,
+      allow_symbol_change: false,
+      hide_top_toolbar: false,
+      hide_legend: false,
+      hide_side_toolbar: true,
+      save_image: false,
+      withdateranges: true,
+      details: false,
+      hotlist: false,
+      calendar: false,
+      studies: studiesForState(),
+      loading_screen: {
+        backgroundColor: state.theme === "light" ? "#f4f6fa" : "#0d131d",
+        foregroundColor: "#4f7cff"
+      },
+      support_host: "https://www.tradingview.com",
+      container_id: "chart_" + panelId
+    };
+  }
+
+  async function renderPanel(panelId, force) {
+    const item = runtime[panelId];
+    if (!item) return;
+    if (!force && !item.visible && !item.hasRendered) return;
+
+    const version = ++item.version;
+    item.hasRendered = true;
+    item.error = false;
+    cleanupRuntime(panelId);
+
+    const container = document.getElementById("chart_" + panelId);
+    container.replaceChildren();
+
+    const symbol = state.selections[panelId];
+    if (isBlockedSymbol(symbol)) {
+      item.error = true;
+      setPanelStatus(
+        panelId,
+        "blocked",
+        selectedName(panelId) + " cannot be shown in an embedded chart.",
+        "TradingView blocks FRED and most ECONOMICS series in widgets. Open it on TradingView or pick a TVC yield symbol."
+      );
+      return;
+    }
+
+    setPanelStatus(panelId, "loading", "Loading " + selectedName(panelId) + "...");
+
+    try {
+      const TradingView = await loadTradingView();
+      if (version !== item.version) return;
+      container.replaceChildren();
+
+      item.observer = new MutationObserver(() => {
+        const iframe = container.querySelector("iframe");
+        if (!iframe || version !== item.version) return;
+        const markReady = () => {
+          if (version !== item.version) return;
+          item.error = false;
+          item.loadedAt = new Date();
+          setPanelStatus(panelId, "ready");
+        };
+        iframe.addEventListener("load", markReady, { once: true });
+        window.setTimeout(markReady, 1400);
+        item.observer.disconnect();
+        item.observer = null;
+      });
+
+      item.observer.observe(container, { childList: true, subtree: true });
+      new TradingView.widget(widgetConfig(panelId));
+
+      item.readyTimer = window.setTimeout(() => {
+        if (version !== item.version || container.querySelector("iframe")) return;
+        item.error = true;
+        setPanelStatus(
+          panelId,
+          "error",
+          "The chart did not load.",
+          "TradingView may be blocked by the network, a privacy extension, or an embed-only symbol restriction."
+        );
+      }, 20000);
+    } catch (error) {
+      if (version !== item.version) return;
+      item.error = true;
+      setPanelStatus(
+        panelId,
+        "error",
+        "Unable to load the chart.",
+        error && error.message ? error.message : "Check the internet connection and try again."
+      );
+    }
+  }
+
+  function renderLoadedPanels() {
+    PANELS.forEach((panel) => {
+      if (runtime[panel.id].hasRendered) renderPanel(panel.id, true);
+    });
+  }
+
+  function refreshAllPanels() {
+    PANELS.forEach((panel) => renderPanel(panel.id, true));
+    announce("All charts refreshed.");
+  }
+
+  function updatePanelHeading(panelId) {
+    const title = document.getElementById("title_" + panelId);
+    if (title) title.textContent = selectedName(panelId);
+    updatePanelMeta(panelId);
+  }
+
+  function applyTheme() {
+    document.documentElement.dataset.theme = state.theme;
+    themeButton.textContent = state.theme === "dark" ? "Light" : "Dark";
+  }
+
+  function applyPhoneFocus() {
+    const isPhone = window.matchMedia("(max-width: 760px)").matches;
+    document.body.classList.toggle("is-phone-focus", isPhone);
+    if (!isPhone) {
+      PANELS.forEach((panel) => document.getElementById("panel_" + panel.id).classList.remove("is-phone-active"));
+      return;
+    }
+    state.phoneIndex = ((state.phoneIndex % PANELS.length) + PANELS.length) % PANELS.length;
+    PANELS.forEach((panel, index) => {
+      document.getElementById("panel_" + panel.id).classList.toggle("is-phone-active", index === state.phoneIndex);
+    });
+    document.getElementById("mobilePanelLabel").textContent = PANELS[state.phoneIndex].label;
+    const activeId = PANELS[state.phoneIndex].id;
+    runtime[activeId].visible = true;
+    if (!runtime[activeId].hasRendered) renderPanel(activeId, true);
+  }
+
+  function applyStateToControls() {
+    intervalSelect.value = state.interval;
+    studiesSelect.value = state.studies;
+    dashboard.classList.toggle("is-stacked", state.layout === "stack");
+    layoutButton.textContent = state.layout === "grid" ? "Stack view" : "Grid view";
+    applyTheme();
+    PANELS.forEach((panel) => {
+      rebuildSelect(panel.id);
+      updatePanelHeading(panel.id);
+    });
+    applyPhoneFocus();
+  }
+
+  function setupLazyLoading() {
+    if (!("IntersectionObserver" in window)) {
+      PANELS.forEach((panel) => { runtime[panel.id].visible = true; renderPanel(panel.id, true); });
+      return;
+    }
+    intersectionObserver = new IntersectionObserver((entries) => {
+      entries.forEach((entry) => {
+        const panelId = entry.target.dataset.panelId;
+        runtime[panelId].visible = entry.isIntersecting;
+        if (entry.isIntersecting && !runtime[panelId].hasRendered) renderPanel(panelId, false);
+      });
+    }, { root: null, rootMargin: "260px 0px", threshold: 0.01 });
+    PANELS.forEach((panel) => intersectionObserver.observe(document.getElementById("panel_" + panel.id)));
+  }
+
+  async function togglePanelFullscreen(panelId) {
+    const panel = document.getElementById("panel_" + panelId);
+    if (!panel) return;
+    try {
+      if (document.fullscreenElement === panel) await document.exitFullscreen();
+      else if (panel.requestFullscreen) await panel.requestFullscreen();
+      else {
+        const focused = panel.classList.toggle("is-focused");
+        document.body.classList.toggle("has-focused-panel", focused);
+      }
+    } catch (error) {
+      const focused = panel.classList.toggle("is-focused");
+      document.body.classList.toggle("has-focused-panel", focused);
+    }
+  }
+
+  function updateConnectionStatus() {
+    const node = document.getElementById("connectionStatus");
+    const text = document.getElementById("connectionText");
+    const online = navigator.onLine;
+    node.classList.toggle("offline", !online);
+    text.textContent = online ? "Browser online" : "Browser offline";
+    if (online) {
+      PANELS.forEach((panel) => {
+        const item = runtime[panel.id];
+        if (item.visible && item.error) renderPanel(panel.id, true);
+      });
+    }
+  }
+
+  function startClocks() {
+    const genevaClock = document.getElementById("genevaClock");
+    const utcClock = document.getElementById("utcClock");
+    const genevaFormatter = new Intl.DateTimeFormat("en-GB", {
+      timeZone: "Europe/Zurich", weekday: "short", day: "2-digit", month: "short",
+      hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false, timeZoneName: "short"
+    });
+    const utcFormatter = new Intl.DateTimeFormat("en-GB", {
+      timeZone: "UTC", weekday: "short", day: "2-digit", month: "short",
+      hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false, timeZoneName: "short"
+    });
+    const update = () => {
+      const now = new Date();
+      genevaClock.dateTime = now.toISOString();
+      utcClock.dateTime = now.toISOString();
+      genevaClock.textContent = genevaFormatter.format(now);
+      utcClock.textContent = utcFormatter.format(now);
+    };
+    update();
+    clockTimer = window.setInterval(update, 1000);
+    document.addEventListener("visibilitychange", update);
+  }
+
+  function addCustomSymbol() {
+    const panelId = addPanelSelect.value;
+    const name = addNameInput.value.trim();
+    const symbol = addSymbolInput.value.trim().toUpperCase();
+    if (!name || !symbol) {
+      announce("Need both a label and a symbol.");
+      return;
+    }
+    if (!symbol.includes(":") && !symbol.includes("-")) {
+      announce("Use EXCHANGE:SYMBOL, for example TVC:US10Y.");
+      return;
+    }
+    state.customOptions[panelId] = state.customOptions[panelId].filter((item) => item[1] !== symbol);
+    state.customOptions[panelId].push([name, symbol]);
+    state.selections[panelId] = symbol;
+    saveState();
+    rebuildSelect(panelId);
+    updatePanelHeading(panelId);
+    renderPanel(panelId, true);
+    addNameInput.value = "";
+    addSymbolInput.value = "";
+    announce(name + " added.");
+  }
+
+  function focusPanelByIndex(index) {
+    state.phoneIndex = index;
+    saveState();
+    if (window.matchMedia("(max-width: 760px)").matches) {
+      applyPhoneFocus();
+    } else {
+      togglePanelFullscreen(PANELS[index].id);
+    }
+  }
+
+  dashboard.addEventListener("change", (event) => {
+    const select = event.target.closest("select[data-panel-id]");
+    if (!select) return;
+    const panelId = select.dataset.panelId;
+    state.selections[panelId] = select.value;
+    updatePanelHeading(panelId);
+    saveState();
+    renderPanel(panelId, true);
+    announce(selectedName(panelId) + " selected.");
+  });
+
+  dashboard.addEventListener("click", (event) => {
+    const button = event.target.closest("button[data-action]");
+    if (!button) return;
+    const panelId = button.closest(".panel").dataset.panelId;
+    if (button.dataset.action === "reload") {
+      renderPanel(panelId, true);
+      announce(selectedName(panelId) + " chart refreshed.");
+    }
+    if (button.dataset.action === "fullscreen") togglePanelFullscreen(panelId);
+    if (button.dataset.action === "open") window.open(tvUrl(state.selections[panelId]), "_blank", "noopener");
+  });
+
+  intervalSelect.addEventListener("change", () => {
+    state.interval = intervalSelect.value;
+    saveState();
+    renderLoadedPanels();
+    announce("Interval changed.");
+  });
+
+  studiesSelect.addEventListener("change", () => {
+    state.studies = studiesSelect.value;
+    saveState();
+    renderLoadedPanels();
+    announce("Studies updated.");
+  });
+
+  layoutButton.addEventListener("click", () => {
+    state.layout = state.layout === "grid" ? "stack" : "grid";
+    saveState();
+    applyStateToControls();
+    announce(state.layout === "grid" ? "Grid view enabled." : "Stack view enabled.");
+  });
+
+  themeButton.addEventListener("click", () => {
+    state.theme = state.theme === "dark" ? "light" : "dark";
+    saveState();
+    applyTheme();
+    renderLoadedPanels();
+  });
+
+  helpButton.addEventListener("click", () => helpCard.classList.toggle("is-open"));
+  addSymbolButton.addEventListener("click", () => addBar.classList.toggle("is-open"));
+  document.getElementById("addConfirmButton").addEventListener("click", addCustomSymbol);
+  addSymbolInput.addEventListener("keydown", (event) => {
+    if (event.key === "Enter") addCustomSymbol();
+  });
+
+  refreshButton.addEventListener("click", refreshAllPanels);
+  resetButton.addEventListener("click", () => {
+    state = cloneDefaults();
+    saveState();
+    applyStateToControls();
+    refreshAllPanels();
+    announce("Dashboard settings reset.");
+  });
+
+  document.getElementById("prevPanelButton").addEventListener("click", () => {
+    state.phoneIndex -= 1;
+    saveState();
+    applyPhoneFocus();
+  });
+  document.getElementById("nextPanelButton").addEventListener("click", () => {
+    state.phoneIndex += 1;
+    saveState();
+    applyPhoneFocus();
+  });
+
+  window.addEventListener("online", updateConnectionStatus);
+  window.addEventListener("offline", updateConnectionStatus);
+  window.addEventListener("resize", applyPhoneFocus);
+
+  document.addEventListener("fullscreenchange", () => {
+    if (!document.fullscreenElement) {
+      document.querySelectorAll(".panel.is-focused").forEach((panel) => panel.classList.remove("is-focused"));
+      document.body.classList.remove("has-focused-panel");
+    }
+  });
+
+  document.addEventListener("keydown", (event) => {
+    const tag = event.target.tagName;
+    if (tag === "INPUT" || tag === "SELECT" || tag === "TEXTAREA") return;
+    if (event.key === "r" || event.key === "R") refreshAllPanels();
+    if (event.key === "t" || event.key === "T") themeButton.click();
+    if (event.key === "s" || event.key === "S") layoutButton.click();
+    if (event.key === "?" || event.key === "/") helpCard.classList.toggle("is-open");
+    if (event.key === "Escape") {
+      if (document.fullscreenElement) document.exitFullscreen();
+      document.querySelectorAll(".panel.is-focused").forEach((panel) => panel.classList.remove("is-focused"));
+      document.body.classList.remove("has-focused-panel");
+    }
+    if (["1", "2", "3", "4"].includes(event.key)) focusPanelByIndex(Number(event.key) - 1);
+  });
+
+  window.addEventListener("beforeunload", () => {
+    if (intersectionObserver) intersectionObserver.disconnect();
+    if (clockTimer) window.clearInterval(clockTimer);
+    PANELS.forEach((panel) => cleanupRuntime(panel.id));
+  });
+
+  buildPanels();
+  applyStateToControls();
+  updateConnectionStatus();
+  startClocks();
+  setupLazyLoading();
 </script>
 </body>
 </html>
