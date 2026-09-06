@@ -1,0 +1,1 @@
+If you see this commit without a 45KB index.html, the full HTML payload was dropped from the tool call.
