@@ -1,8 +1,9 @@
 # Markets Monitor
 
-Static TradingView dashboard.
+Live page (after Pages finishes publishing):
 
-After `index.html` is on `main`, open:
+https://masterkano.github.io/markets-monitor/
 
-- GitHub Pages (once enabled): https://masterkano.github.io/markets-monitor/
-- jsDelivr (works without Pages): https://cdn.jsdelivr.net/gh/MasterKano/markets-monitor@main/index.html
+Immediate share link (no Pages wait):
+
+https://raw.githack.com/MasterKano/markets-monitor/main/index.html
