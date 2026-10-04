@@ -1,0 +1,51 @@
+name: Update market data
+
+on:
+  schedule:
+    # UTC. Weekdays ~05:30 (pre-Europe open) and ~21:00 (after US close).
+    # Note: GitHub runs scheduled workflows only from the default branch.
+    - cron: "30 5 * * 1-5"
+    - cron: "0 21 * * 1-5"
+  workflow_dispatch:
+  push:
+    # Lets the preview branch build its own data (workflow_dispatch needs the file on the default branch).
+    branches: [table-monitor]
+    paths: ["scripts/**", ".github/workflows/update-data.yml"]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: update-data-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: scripts/requirements.txt
+      - name: Install
+        run: pip install -r scripts/requirements.txt
+      - name: Market data (Yahoo)
+        run: python scripts/build_data.py
+      - name: News
+        run: python scripts/build_news.py
+        continue-on-error: true
+      - name: Commit data back to this branch
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898333+github-actions[bot]@users.noreply.github.com"
+          git add data/market.json data/news.json
+          if git diff --cached --quiet; then echo "No data changes"; exit 0; fi
+          git commit -m "Update market data $(date -u +'%Y-%m-%d %H:%M') UTC"
+          for i in 1 2 3; do
+            git pull --rebase --autostash origin "${GITHUB_REF_NAME}" && git push origin "HEAD:${GITHUB_REF_NAME}" && exit 0
+            sleep $((i * 10))
+          done
+          exit 1
