@@ -41,11 +41,16 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898333+github-actions[bot]@users.noreply.github.com"
-          git add data/market.json data/news.json
-          if git diff --cached --quiet; then echo "No data changes"; exit 0; fi
-          git commit -m "Update market data $(date -u +'%Y-%m-%d %H:%M') UTC"
+          mkdir -p "$RUNNER_TEMP/out" && cp data/market.json data/news.json "$RUNNER_TEMP/out/"
           for i in 1 2 3; do
-            git pull --rebase --autostash origin "${GITHUB_REF_NAME}" && git push origin "HEAD:${GITHUB_REF_NAME}" && exit 0
+            # rebuild the commit on top of the current branch tip (this run's files are the newest)
+            git fetch -q origin "${GITHUB_REF_NAME}"
+            git reset -q --hard "origin/${GITHUB_REF_NAME}"
+            cp "$RUNNER_TEMP/out/market.json" "$RUNNER_TEMP/out/news.json" data/
+            git add data/market.json data/news.json
+            if git diff --cached --quiet; then echo "No data changes"; exit 0; fi
+            git commit -q -m "Update market data $(date -u +'%Y-%m-%d %H:%M') UTC"
+            git push origin "HEAD:${GITHUB_REF_NAME}" && exit 0
             sleep $((i * 10))
           done
           exit 1
