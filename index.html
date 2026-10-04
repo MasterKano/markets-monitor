@@ -5,7 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="color-scheme" content="dark light">
 <title>Markets Monitor</title>
+<link rel="icon" href="data:,">
 <link rel="stylesheet" href="styles.css">
+<link rel="stylesheet" href="table.css">
 </head>
 <body>
 <div class="shell">
@@ -20,7 +22,8 @@
     </div>
   </header>
   <div class="toolbar">
-    <button class="button is-on" id="pageMonitor" type="button">Monitor</button>
+    <button class="button is-on" id="pageTable" type="button">Table</button>
+    <button class="button" id="pageMonitor" type="button">Monitor</button>
     <button class="button" id="pageEquities" type="button">Equities</button>
     <label class="field" for="intervalSelect"><span class="field-label">Interval</span>
       <select id="intervalSelect">
@@ -49,7 +52,27 @@
     <input id="addSymbolInput" type="text" placeholder="EXCHANGE:SYMBOL" spellcheck="false">
     <button class="button is-on" id="addConfirmButton" type="button">Add</button>
   </div>
-  <section class="page is-on" id="monitorPage">
+  <section class="page is-on" id="tablePage">
+    <div class="tbl-tabs" id="tblTabs" role="tablist" aria-label="Instrument groups"></div>
+    <div class="tbl-bar">
+      <div class="seg" role="group" aria-label="Columns">
+        <button class="button" id="compactBtn" type="button">Compact</button>
+        <button class="button" id="fullBtn" type="button">Full</button>
+      </div>
+      <input id="tblFilter" class="tbl-filter" type="search" placeholder="Filter names" autocomplete="off" spellcheck="false">
+      <span class="toolbar-spacer"></span>
+      <span class="tbl-stamp" id="tblStamp"></span>
+    </div>
+    <div class="movers" id="tblMovers"></div>
+    <div class="tbl-wrap" id="tblWrap"><table class="mtable" id="tbl"></table></div>
+    <p class="tbl-foot" id="tblFoot"></p>
+    <section class="news-panel" aria-labelledby="newsTitle">
+      <div class="news-head"><h2 id="newsTitle">News</h2><span class="news-meta" id="newsMeta"></span></div>
+      <ol class="news-list" id="newsList"></ol>
+      <p class="news-note">Headlines via Google News RSS and official exchange feeds (Oslo Børs NewsWeb, Nasdaq Nordic). Links open the publisher in a new tab. Times in Geneva time.</p>
+    </section>
+  </section>
+  <section class="page" id="monitorPage">
     <div class="mobile-nav">
       <button class="button" id="prevPanelButton" type="button">Prev</button>
       <strong id="mobilePanelLabel">Markets</strong>
@@ -79,9 +102,32 @@
       </section>
     </div>
   </section>
-  <footer>Bond yields blocked in widgets. Rates use ETFs. Equities search uses TV lookup when allowed.</footer>
+  <footer>Table: Yahoo Finance daily data via GitHub Actions. <span id="footStamp"></span> Charts: TradingView widgets; bond yields blocked in widgets, so Monitor rates use ETFs. Equities search uses TV lookup when allowed.</footer>
 </div>
 <div class="sr-only" id="appStatus" role="status"></div>
+<div class="modal" id="chartModal" hidden role="dialog" aria-modal="true" aria-labelledby="cmTitle">
+  <section class="modal-card">
+    <div class="panel-head">
+      <div>
+        <span class="panel-label">Chart</span>
+        <strong class="panel-title" id="cmTitle"></strong>
+        <div class="panel-meta" id="cmMeta"></div>
+      </div>
+      <div class="panel-controls">
+        <a class="button" id="cmTv" target="_blank" rel="noopener noreferrer">TradingView ↗</a>
+        <a class="button" id="cmYahoo" target="_blank" rel="noopener noreferrer">Yahoo ↗</a>
+        <button class="button" id="cmSimple" type="button" title="Toggle a simple 1Y line from the table data">1Y line</button>
+        <button class="button" id="cmClose" type="button" aria-label="Close chart">✕</button>
+      </div>
+    </div>
+    <div class="chart-stage">
+      <div class="chart" id="chart_tablechart"></div>
+      <div class="chart-status" id="status_tablechart" hidden></div>
+      <div class="cm-fallback" id="cmFallback" hidden></div>
+    </div>
+  </section>
+</div>
 <script src="app.js"></script>
+<script src="table.js"></script>
 </body>
 </html>
