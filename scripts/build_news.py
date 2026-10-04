@@ -182,12 +182,16 @@ def main():
                 status.append(dict(tab=tab, feed="nasdaq", query=co, ok=False, error=str(e)[:200]))
         # newest first, de-duplicate by normalised headline and by URL
         items.sort(key=lambda x: x["time"], reverse=True)
-        seen, keep = set(), []
+        seen, keep, bags = set(), [], []
         for it in items:
             k = norm(it["title"])
             if not k or k in seen or it["url"] in seen:
                 continue
-            seen.add(k); seen.add(it["url"])
+            bag = set(k.split())
+            # near-duplicates (same story, slightly different headline from another outlet)
+            if any(len(bag & o) / max(1, len(bag | o)) >= 0.6 for o in bags):
+                continue
+            seen.add(k); seen.add(it["url"]); bags.append(bag)
             keep.append(it)
         # diversity: round-robin across topics (each exchange feed is its own topic), newest first within each
         by = {}
