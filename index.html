@@ -57,9 +57,9 @@
     <details class="explain" id="explain" open>
       <summary><span class="explain-title">How to read this table</span><span class="explain-hint">Price · Volume · Moving averages</span></summary>
       <div class="explain-grid">
-        <div class="ex-item ex-price"><h3>Price</h3><p><b>Last</b> is the latest daily close from Yahoo Finance (delayed, end-of-day; tagged <span class="live">live</span> if a session was still open when fetched), in local currency. <b>Market</b> is the listing venue. Data refreshes twice each weekday (before the European open and after the US close); as of <b id="exAsOf">…</b>. Returns are price-only, excluding dividends.</p></div>
-        <div class="ex-item ex-vol"><h3>Volume</h3><p>Ratio = last session's volume ÷ average daily volume of the prior N sessions (5, 10, 20, 50 days). <b>1.0×</b> = an average day; <span class="hot-key">above 1.5×</span> is highlighted as unusually heavy trading. The small grey figure is the N-day average itself.</p></div>
-        <div class="ex-item ex-ma"><h3>Moving averages</h3><p>% distance of the last price from its N-day simple moving average: <span class="up">+4.0%</span> = 4% above the MA <i class="dot above"></i>, <span class="dn">−4.0%</span> = 4% below <i class="dot below"></i>. Yields are shown in basis points.</p></div>
+        <div class="ex-item ex-price"><h3>Price</h3><p><b>Last</b> = Yahoo daily close (local ccy; <span class="live">live</span> if session was open at fetch). <b>Market</b> = listing venue. Price returns only (no dividends). As of <b id="exAsOf">…</b>.</p></div>
+        <div class="ex-item ex-vol"><h3>Volume</h3><p>Ratio = last ÷ N-day average (5/10/20/50). <b>1.0×</b> = average day; <span class="hot-key">&gt; 1.5×</span> highlighted. Grey figure = N-day avg volume.</p></div>
+        <div class="ex-item ex-ma"><h3>Moving averages</h3><p>% vs N-day SMA: <span class="up">+%</span> above <i class="dot above"></i>, <span class="dn">−%</span> below <i class="dot below"></i>. Yields in bp.</p></div>
       </div>
     </details>
     <div class="tbl-tabs" id="tblTabs" role="tablist" aria-label="Instrument groups"></div>
@@ -79,8 +79,9 @@
     <div class="movers" id="tblMovers"></div>
     <div class="tbl-wrap" id="tblWrap"><table class="mtable" id="tbl"></table></div>
     <p class="tbl-foot" id="tblFoot"></p>
+    <nav class="pw-subnav" id="pwSubnav" aria-label="Nordic Power sections"></nav>
     <div class="power-view" id="powerView"></div>
-    <section class="news-panel" aria-labelledby="newsTitle">
+    <section class="news-panel" id="pwNews" aria-labelledby="newsTitle">
       <div class="news-head"><h2 id="newsTitle">News</h2><span class="news-meta" id="newsMeta"></span></div>
       <ol class="news-list" id="newsList"></ol>
       <p class="news-note">Headlines via Google News RSS and official exchange feeds (Oslo Børs NewsWeb, Nasdaq Nordic). Links open the publisher in a new tab. Times in Geneva time.</p>
@@ -94,7 +95,7 @@
     </div>
     <main class="dashboard" id="dashboard"></main>
   </section>
-  <footer>Table: Yahoo Finance daily data via GitHub Actions. Nordic Power: EEX settlements, Energy-Charts (CC BY 4.0) day-ahead prices, NVE hydro. <span id="footStamp"></span> Charts: TradingView widgets. Treasury yields cannot be embedded, so Monitor Rates uses bond ETFs and Table yield rows open a Yahoo 1Y chart. Markets search uses a static symbol index (LSE/AIM, OMX Stockholm, Oslo, NYSE/Nasdaq, TSX/TSXV, HKEX; works offline). TradingView lookup is tried when reachable; exotic names may need EXCH:SYM or in-chart search.</footer>
+  <footer>Table: Yahoo Finance daily data via GitHub Actions. Nordic Power: EEX settlements, Energy-Charts (CC BY 4.0) day-ahead prices, NVE hydro, Svenska kraftnät SE4 load/flows (ENTSO-E when enabled). <span id="footStamp"></span> Charts: TradingView widgets. Treasury yields cannot be embedded, so Monitor Rates uses bond ETFs and Table yield rows open a Yahoo 1Y chart. Markets search uses a static symbol index (LSE/AIM, OMX Stockholm, Oslo, NYSE/Nasdaq, TSX/TSXV, HKEX; works offline). TradingView lookup is tried when reachable; exotic names may need EXCH:SYM or in-chart search.</footer>
 </div>
 <div class="sr-only" id="appStatus" role="status"></div>
 <div class="modal" id="chartModal" hidden role="dialog" aria-modal="true" aria-labelledby="cmTitle">
