@@ -28,7 +28,14 @@ GROUPS = [
             R("ERG.MI", "ERG", "MIL:ERG"),
             R("VLTSA.PA", "Voltalia", "EURONEXT:VLTSA"),
             R("NDX1.DE", "Nordex", "XETR:NDX1"),
+        ]),
+        dict(label="Benchmarks",
+             note="Listed clean-energy / renewables UCITS ETFs for context (price returns, local currency).",
+             rows=[
             R("INRG.L", "iShares Global Clean Energy (UCITS)", "LSE:INRG", "etf"),
+            R("R4RU.DE", "Global X Renewable Energy Producers (UCITS)", "XETR:R4RU", "etf"),
+            R("RENW.L", "L&G Clean Energy (UCITS)", "LSE:RENW", "etf"),
+            R("WNDY.L", "Global X Wind Energy (UCITS)", "LSE:WNDY", "etf"),
         ]),
         dict(label="Strategic peers",
              note="Speculative, illustrative screen of listed strategic and financial investors active in "
