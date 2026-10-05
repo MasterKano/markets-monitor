@@ -139,13 +139,16 @@ function yahooUrl(s){return"https://finance.yahoo.com/quote/"+encodeURIComponent
 function bigChart(r){const p=r.spark;if(!p||p.length<2)return'<p class="fallback-msg">No price history available.</p>';const w=600,h=220;let mn=Math.min(...p),mx=Math.max(...p);if(mx===mn)mx=mn+1;
  const d=p.map((v,i)=>(i?"L":"M")+((i/(p.length-1))*w).toFixed(1)+" "+(h-8-((v-mn)/(mx-mn))*(h-16)).toFixed(1)).join("");const c=p[p.length-1]>=p[0]?"var(--good)":"var(--bad)";
  return'<svg viewBox="0 0 '+w+' '+h+'" preserveAspectRatio="none" class="fallback-svg"><path d="'+d+'L'+w+' '+h+'L0 '+h+'Z" fill="'+c+'" opacity=".12"/><path d="'+d+'" fill="none" stroke="'+c+'" stroke-width="2" vector-effect="non-scaling-stroke"/></svg><div class="fallback-axis"><span>'+esc(r.spark_from||"")+'</span><span>hi '+fpx(mx,r.kind)+' · lo '+fpx(mn,r.kind)+'</span><span>'+esc(r.bar_date||"")+'</span></div>';}
-function openChart(r){const m=$("chartModal");$("cmTitle").textContent=r.name;$("cmMeta").textContent=[r.tv||"no TradingView mapping",r.sym,r.ccy].filter(Boolean).join(" · ");
+/* TradingView's embeddable widget refuses Cboe Treasury yields (TVC:US*) with an "only available on TradingView" popup,
+   so yield rows open the Yahoo 1Y line straight away; the TradingView button still links to the full chart. */
+const noWidget=r=>r.kind==="yield"||/^TVC:US\d/.test(r.tv||"");
+function openChart(r){const m=$("chartModal");const y=noWidget(r);$("cmTitle").textContent=r.name;$("cmMeta").textContent=[r.tv||"no TradingView mapping",r.sym,r.ccy].filter(Boolean).join(" · ");
  $("cmTv").href=r.tv?"https://www.tradingview.com/chart/?symbol="+encodeURIComponent(r.tv):"https://www.tradingview.com/";$("cmYahoo").href=yahooUrl(r.sym);
- $("cmFallback").innerHTML='<div class="fallback-head">1Y daily closes (Yahoo) — shown when the TradingView widget is unavailable for this symbol</div>'+bigChart(r);
+ $("cmFallback").innerHTML='<div class="fallback-head">'+(y?"1Y daily closes (Yahoo, %). Treasury yields can't be embedded from TradingView; use TradingView ↗ for the interactive chart.":"1Y daily closes (Yahoo) — shown when the TradingView widget is unavailable for this symbol")+'</div>'+bigChart(r);
  m.hidden=false;document.body.classList.add("modal-open");$("cmClose").focus();
- const fb=$("cmFallback");fb.hidden=true;$("cmSimple").classList.remove("is-on");
- if(r.tv&&window.MM&&window.MM.openChart){window.MM.openChart(r.name,r.tv);setTimeout(()=>{if(!window.TradingView)fb.hidden=false;},5000);}
- else{fb.hidden=false;const s=$("status_tablechart");if(s){s.hidden=true;}$("chart_tablechart").replaceChildren();}}
+ const fb=$("cmFallback"),sb=$("cmSimple");
+ if(r.tv&&!y&&window.MM&&window.MM.openChart){fb.hidden=true;sb.classList.remove("is-on");sb.disabled=false;sb.title="Toggle a simple 1Y line from the table data";window.MM.openChart(r.name,r.tv);setTimeout(()=>{if(!window.TradingView)fb.hidden=false;},5000);}
+ else{fb.hidden=false;sb.classList.add("is-on");sb.disabled=true;sb.title=y?"Yields show the Yahoo 1Y line (no embeddable TradingView chart)":"No TradingView mapping: Yahoo 1Y line only";window.MM&&window.MM.clearChart&&window.MM.clearChart();const s=$("status_tablechart");if(s)s.hidden=true;$("chart_tablechart").replaceChildren();}}
 function closeChart(){$("chartModal").hidden=true;document.body.classList.remove("modal-open");$("chart_tablechart").replaceChildren();}
 
 /* ---------- load ---------- */
