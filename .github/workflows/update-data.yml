@@ -2,15 +2,13 @@ name: Update market data
 
 on:
   schedule:
-    # UTC. Weekdays ~05:30 (pre-Europe open) and ~21:00 (after US close).
+    # UTC. Weekdays ~05:30 (pre-Europe open), ~12:30 (Nordic Power only: tomorrow's day-ahead prices
+    # and the day's EEX settlements) and ~21:00 (after US close; markets + news only).
     # Note: GitHub runs scheduled workflows only from the default branch.
     - cron: "30 5 * * 1-5"
+    - cron: "30 12 * * 1-5"
     - cron: "0 21 * * 1-5"
   workflow_dispatch:
-  push:
-    # Lets the preview branch build its own data (workflow_dispatch needs the file on the default branch).
-    branches: [table-monitor]
-    paths: ["scripts/**", ".github/workflows/update-data.yml"]
 
 permissions:
   contents: write
@@ -33,21 +31,32 @@ jobs:
       - name: Install
         run: pip install -r scripts/requirements.txt
       - name: Market data (Yahoo)
+        if: github.event.schedule != '30 12 * * 1-5'
         run: python scripts/build_data.py
       - name: News
+        if: github.event.schedule != '30 12 * * 1-5'
         run: python scripts/build_news.py
+        continue-on-error: true
+      - name: Nordic power (EEX CSV, day-ahead, hydro)
+        # Energy-Charts allows ~2 price requests/minute, so this step takes several minutes; skipped at 21:00.
+        if: github.event.schedule != '0 21 * * 1-5'
+        run: python scripts/build_power.py
+        timeout-minutes: 15
         continue-on-error: true
       - name: Commit data back to this branch
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898333+github-actions[bot]@users.noreply.github.com"
-          mkdir -p "$RUNNER_TEMP/out" && cp data/market.json data/news.json "$RUNNER_TEMP/out/"
+          # only the files this run actually rewrote (steps can be skipped per schedule)
+          changed=$(git status --porcelain -- data/market.json data/news.json data/power.json | awk '{print $2}')
+          if [ -z "$changed" ]; then echo "No data changes"; exit 0; fi
+          mkdir -p "$RUNNER_TEMP/out" && cp $changed "$RUNNER_TEMP/out/"
           for i in 1 2 3; do
             # rebuild the commit on top of the current branch tip (this run's files are the newest)
             git fetch -q origin "${GITHUB_REF_NAME}"
             git reset -q --hard "origin/${GITHUB_REF_NAME}"
-            cp "$RUNNER_TEMP/out/market.json" "$RUNNER_TEMP/out/news.json" data/
-            git add data/market.json data/news.json
+            for f in $changed; do cp "$RUNNER_TEMP/out/$(basename "$f")" "$f"; done
+            git add $changed
             if git diff --cached --quiet; then echo "No data changes"; exit 0; fi
             git commit -q -m "Update market data $(date -u +'%Y-%m-%d %H:%M') UTC"
             git push origin "HEAD:${GITHUB_REF_NAME}" && exit 0
