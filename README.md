@@ -14,11 +14,17 @@ Immediate share link (no Pages wait): https://raw.githack.com/MasterKano/markets
   groups (off by default on phones/narrow screens, on for desktop; choices are remembered per browser).
   Instrument, Market (listing venue) and Last stay pinned while scrolling sideways. A collapsible
   "How to read this table" panel explains price source, volume ratios and MA distances. Missing data shows as `n/a`.
+- **Nordic Power** (tab on the Table page): day-ahead map of the Nordic bidding zones coloured by today's (or tomorrow's)
+  daily average, zones × hours heatmap (negative prices outlined), daily/7d/30d averages and key spreads; EEX forward
+  curves per zone with the Nordic system price and Germany overlaid, a zone × tenor table (price, day/week/since-1-Sep
+  changes, implied EPAD vs system, vs DE), zone premia and benchmark history; power drivers (TTF, EUA, API2 coal,
+  GoO wind); Norwegian reservoir filling vs the NVE 2006–2025 min/median/max band plus a Swedish snapshot; news.
 - **Monitor** / **Equities**: TradingView widget charts (unchanged).
 
 ## Data
 
-`.github/workflows/update-data.yml` runs on weekdays at 05:30 and 21:00 UTC (and on demand) and commits:
+`.github/workflows/update-data.yml` runs on weekdays at 05:30, 12:30 (Nordic Power only) and 21:00 UTC (markets and
+news only), and on demand, and commits:
 
 - `data/market.json` from `scripts/build_data.py`: Yahoo Finance daily bars (chart API with retries/backoff,
   yfinance fallback). Price returns, not total return. Futures are continuous front-month, so long horizons
@@ -26,5 +32,17 @@ Immediate share link (no Pages wait): https://raw.githack.com/MasterKano/markets
 - `data/news.json` from `scripts/build_news.py`: Google News RSS searches plus exchange announcements
   (Oslo Børs NewsWeb, Nasdaq Nordic). Headlines and links only. FT excluded.
 
-Local run: `pip install -r scripts/requirements.txt && python scripts/build_data.py && python scripts/build_news.py`,
+- `data/power.json` from `scripts/build_power.py`:
+  - EEX daily settlements from the public CSV at `MasterKano/scrape` (`master/eex_master.csv`, read via
+    raw.githubusercontent.com). Base-load Month/Quarter/Year futures for the Nordic system price, the Nordic zones
+    (outright EEX Nordic Zonal Futures, not EPADs) and DE/FR/NL/GB/ES/IT, plus TTF, EUA, API2 coal and GoO wind.
+    History starts 1 Sep 2026 (no backfill). Contracts already in delivery are excluded.
+  - Day-ahead prices per bidding zone from the Energy-Charts API (Fraunhofer ISE, CC BY 4.0; ~2 requests/minute, so
+    this step takes a few minutes). Fallbacks: Energinet Energi Data Service (DK1, DK2, NO2, SE3, SE4, DE) and
+    spot-hinta.fi (today/tomorrow only). Daily averages from earlier runs are kept so 7d/30d averages survive outages.
+    15-min prices are averaged to hourly; days are CET delivery days and are shown in Geneva time.
+  - Hydro: NVE magasinstatistikk API (Norway and NO1–NO5, weekly) and the Energiföretagen weekly PDF (Sweden snapshot).
+  - Capture prices are computed (generation-weighted average price) only where Energy-Charts publishes generation.
+
+Local run: `pip install -r scripts/requirements.txt && python scripts/build_data.py && python scripts/build_news.py && python scripts/build_power.py`,
 then `python -m http.server` and open http://localhost:8000/.
