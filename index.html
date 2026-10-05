@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="color-scheme" content="dark light">
 <title>Markets Monitor</title>
+<meta name="description" content="Markets Monitor: daily cross-asset dashboard for Nordic renewables, energy, mining, commodities, indices, rates and FX.">
 <link rel="icon" href="data:,">
 <link rel="stylesheet" href="styles.css">
 <link rel="stylesheet" href="table.css">
@@ -13,7 +14,7 @@
 <div class="shell">
   <header class="app-header">
     <div>
-      <span class="brand-kicker">Jezza's Dashboard</span>
+      <span class="brand-kicker">Energy · Mining · Macro</span>
       <h1>Markets Monitor</h1>
     </div>
     <div class="clocks">
@@ -53,11 +54,23 @@
     <button class="button is-on" id="addConfirmButton" type="button">Add</button>
   </div>
   <section class="page is-on" id="tablePage">
+    <details class="explain" id="explain" open>
+      <summary><span class="explain-title">How to read this table</span><span class="explain-hint">Price · Volume · Moving averages</span></summary>
+      <div class="explain-grid">
+        <div class="ex-item ex-price"><h3>Price</h3><p><b>Last</b> is the latest daily close from Yahoo Finance (delayed, end-of-day; tagged <span class="live">live</span> if a session was still open when fetched), in local currency. <b>Market</b> is the listing venue. Data refreshes twice each weekday (before the European open and after the US close); as of <b id="exAsOf">…</b>. Returns are price-only, excluding dividends.</p></div>
+        <div class="ex-item ex-vol"><h3>Volume</h3><p>Ratio = last session's volume ÷ average daily volume of the prior N sessions (5, 10, 20, 50 days). <b>1.0×</b> = an average day; <span class="hot-key">above 1.5×</span> is highlighted as unusually heavy trading. The small grey figure is the N-day average itself.</p></div>
+        <div class="ex-item ex-ma"><h3>Moving averages</h3><p>% distance of the last price from its N-day simple moving average: <span class="up">+4.0%</span> = 4% above the MA <i class="dot above"></i>, <span class="dn">−4.0%</span> = 4% below <i class="dot below"></i>. Yields are shown in basis points.</p></div>
+      </div>
+    </details>
     <div class="tbl-tabs" id="tblTabs" role="tablist" aria-label="Instrument groups"></div>
     <div class="tbl-bar">
-      <div class="seg" role="group" aria-label="Columns">
+      <div class="seg" role="group" aria-label="Column density">
         <button class="button" id="compactBtn" type="button">Compact</button>
         <button class="button" id="fullBtn" type="button">Full</button>
+      </div>
+      <div class="tgls" role="group" aria-label="Column groups">
+        <button class="button tgl" id="volBtn" type="button" aria-pressed="false" title="Show / hide the Volume columns"><span class="sw" aria-hidden="true"></span>Volume</button>
+        <button class="button tgl" id="maBtn" type="button" aria-pressed="false" title="Show / hide the Moving average columns"><span class="sw" aria-hidden="true"></span>Moving avg</button>
       </div>
       <input id="tblFilter" class="tbl-filter" type="search" placeholder="Filter names" autocomplete="off" spellcheck="false">
       <span class="toolbar-spacer"></span>
