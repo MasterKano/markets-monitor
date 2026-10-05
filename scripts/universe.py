@@ -2,8 +2,8 @@
 
 Each row: (yahoo_symbol, display_name, tradingview_symbol or None, kind, note)
 kind: equity | etf | future | index | fx | yield
-Rationale strings for the 'Potential acquirers' sub-group are a speculative screen of listed
-strategic / financial buyers for a Nordic renewable IPP. They are not based on any reported approach.
+Rationale strings for the 'Strategic peers' sub-group are a speculative, illustrative screen of listed
+strategic / financial investors active in European renewables. They are not based on any reported approach.
 """
 
 def R(sym, name, tv=None, kind="equity", note=None):
@@ -30,9 +30,10 @@ GROUPS = [
             R("NDX1.DE", "Nordex", "XETR:NDX1"),
             R("INRG.L", "iShares Global Clean Energy (UCITS)", "LSE:INRG", "etf"),
         ]),
-        dict(label="Potential acquirers",
-             note="Speculative screen of listed strategic/financial buyers for a Nordic renewable IPP such as "
-                  "Cloudberry. Not based on any reported approach. Hover a name for the rationale.",
+        dict(label="Strategic peers",
+             note="Speculative, illustrative screen of listed strategic and financial investors active in "
+                  "European renewables. Not based on any reported approach; not investment advice. "
+                  "Hover a name for the rationale.",
              rows=[
             R("FORTUM.HE", "Fortum", "OMXHEX:FORTUM", note="Nordic hydro/nuclear utility (Finnish state ~51%); strategy targets growth in Nordic onshore wind/solar, strong balance sheet."),
             R("EQNR.OL", "Equinor", "OSL:EQNR", note="Norwegian state-controlled major with a power/renewables arm; has bought onshore platforms before (BeGreen, Wento) and holds ~10% of Ørsted."),

@@ -10,7 +10,10 @@ Immediate share link (no Pages wait): https://raw.githack.com/MasterKano/markets
   Indices, Rates & FX). Price returns 1D to 10Y, volume vs 5/10/20/50-day averages (ratio highlighted above 1.5x),
   distance from 10/20/50/200-day moving averages, a 1-year sparkline and a news panel per tab.
   Heatmap colours are scaled per horizon. Click a header to sort, a row to open its TradingView chart.
-  *Compact* hides 2Y-10Y and the 5d/10d columns. Missing data shows as `n/a`.
+  *Compact* hides 2Y-10Y and the 5d/10d columns; the *Volume* and *Moving avg* switches show/hide those column
+  groups (off by default on phones/narrow screens, on for desktop; choices are remembered per browser).
+  Instrument, Market (listing venue) and Last stay pinned while scrolling sideways. A collapsible
+  "How to read this table" panel explains price source, volume ratios and MA distances. Missing data shows as `n/a`.
 - **Monitor** / **Equities**: TradingView widget charts (unchanged).
 
 ## Data
