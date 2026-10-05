@@ -20,11 +20,15 @@ Immediate share link (no Pages wait): https://raw.githack.com/MasterKano/markets
   changes, implied EPAD vs system, vs DE), zone premia and benchmark history; power drivers (TTF, EUA, API2 coal,
   GoO wind); Norwegian reservoir filling vs the NVE 2006–2025 min/median/max band plus a Swedish snapshot; news.
 - **Monitor**: four TradingView widget charts styled like the Table cards: Markets, Commodities, FX and Rates / Bonds.
-  Markets has an instrument dropdown plus type-ahead search (built-in list of indices, popular stocks/ETFs and every
-  equity/ETF/index in `scripts/universe.py`, so it works offline; TradingView lookup is added when reachable), quick-pick
-  chips, and in-widget symbol change. Searched symbols are kept under "Recent" in the dropdown. Rates / Bonds uses
-  Treasury and credit ETFs because TradingView does not allow Treasury yields (TVC:US*) in embedded widgets; for the
-  same reason, yield rows on the Table open a Yahoo 1-year line chart (TradingView ↗ still links to the full chart).
+  Markets has an instrument dropdown plus type-ahead search over `data/symbols.json` (built by
+  `scripts/build_symbols.py`: London LSE/AIM, Sweden OMX Stockholm, Norway Oslo, New York NYSE/Nasdaq/Arca,
+  Toronto TSX/TSXV, Hong Kong HKEX, plus every equity/ETF/index TV symbol in `scripts/universe.py` and curated
+  energy/mining peers such as Genel Energy). Client-side only — no API keys; TradingView's remote symbol-search often
+  returns 403 from static hosts, so the offline index is the primary autofill. Quick-pick chips and in-widget symbol
+  change remain. Searched symbols are kept under "Recent". Exotic names outside the index may need `EXCH:SYM` or the
+  in-chart TradingView search. Rates / Bonds uses Treasury and credit ETFs because TradingView does not allow Treasury
+  yields (TVC:US*) in embedded widgets; for the same reason, yield rows on the Table open a Yahoo 1-year line chart
+  (TradingView ↗ still links to the full chart).
 
 ## Data
 
@@ -37,6 +41,9 @@ news only), and on demand, and commits:
 - `data/news.json` from `scripts/build_news.py`: Google News RSS searches plus exchange announcements
   (Oslo Børs NewsWeb, Nasdaq Nordic). Headlines and links only. FT excluded.
 
+- `data/symbols.json` from `scripts/build_symbols.py`: offline Markets chart autofill catalog (name + TradingView
+  `EXCH:SYM` + kind). Built from Nasdaq Trader directories and a filtered free ticker database for LSE/AIM, OMXSTO,
+  OSL, NYSE/Nasdaq/Arca, TSX/TSXV and HKEX; no API keys. Re-run locally when refreshing the catalog; optional in CI.
 - `data/power.json` from `scripts/build_power.py`:
   - EEX daily settlements from the public CSV at `MasterKano/scrape` (`master/eex_master.csv`, read via
     raw.githubusercontent.com). Base-load Month/Quarter/Year futures for the Nordic system price, the Nordic zones
@@ -49,5 +56,5 @@ news only), and on demand, and commits:
   - Hydro: NVE magasinstatistikk API (Norway and NO1–NO5, weekly) and the Energiföretagen weekly PDF (Sweden snapshot).
   - Capture prices are computed (generation-weighted average price) only where Energy-Charts publishes generation.
 
-Local run: `pip install -r scripts/requirements.txt && python scripts/build_data.py && python scripts/build_news.py && python scripts/build_power.py`,
+Local run: `pip install -r scripts/requirements.txt && python scripts/build_data.py && python scripts/build_news.py && python scripts/build_power.py && python scripts/build_symbols.py`,
 then `python -m http.server` and open http://localhost:8000/.
