@@ -342,7 +342,6 @@ def build_capture(raw_prices, today):
         try:
             js = get("https://api.energy-charts.info/public_power", params=dict(country=code, start=start, end=end), tries=2).json()
             idx = pd.to_datetime(js["unix_seconds"], unit="s", utc=True)
-            px = raw_prices[z][1].resample("15min").ffill() if True else None
             res = {}
             for pt in js.get("production_types", []):
                 nm = pt.get("name", "")

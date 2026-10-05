@@ -201,7 +201,7 @@ function renderFw(){const E=P.eex;if(!E){["pwCurve","pwPrem","pwHist"].forEach(i
  ser.push({name:zl,color:COL.zone,w:2.6,dots:true,r:3.2,vals:T.map(t=>v(st.zone,t.c))});
  $("pwCurveKeys").innerHTML=ser.slice().reverse().map(s=>'<span class="pw-key"><i style="background:'+s.color+(s.dash?";opacity:.8":"")+'"></i>'+esc(s.name)+'</span>').join("");
  lineChart($("pwCurve"),{h:($("pwCurve").clientWidth||600)<520?240:380,n:T.length,groups:T.map(t=>t.t),gap:.8,xgroups:GL,xall:true,xw:30,series:ser,label:"Forward curve",
-  xlab:i=>{const c=T[i].c;return T[i].t==="M"?c.slice(0,3):T[i].t==="Q"?c.replace("-","'"):"'"+c.slice(-2);},
+  xlab:i=>{const c=T[i].c,nar=($("pwCurve").clientWidth||600)<560;return T[i].t==="M"?(nar?c[0]:c.slice(0,3)):T[i].t==="Q"?(nar?c.slice(0,2):c.replace("-","'")):(nar?"":"'")+c.slice(-2);},
   tip:i=>'<b>'+esc(T[i].c)+'</b> <span class="src">from '+esc(T[i].start)+'</span>'+ser.slice().reverse().map(s=>'<br><i class="pw-tk" style="background:'+s.color+'"></i>'+esc(s.name)+' <b>'+fpt(s.vals[i])+'</b>').join("")+(isNum(v(st.zone,T[i].c))&&isNum(v("Nordic",T[i].c))&&st.zone!=="Nordic"?'<br><span class="src">'+esc(st.zone)+' − system '+fst(v(st.zone,T[i].c)-v("Nordic",T[i].c))+'</span>':"")});
  renderPrem();renderFwTable();}
 function renderPrem(){const E=P.eex,T=E.tenors,zn=E.zones;
