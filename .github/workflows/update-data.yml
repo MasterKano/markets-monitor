@@ -41,6 +41,9 @@ jobs:
         # Energy-Charts allows ~2 price requests/minute, so this step takes several minutes; skipped at 21:00.
         if: github.event.schedule != '0 21 * * 1-5'
         run: python scripts/build_power.py
+        env:
+          # optional: ENTSO-E wind / generation / load for SE4; skipped when the secret is not set
+          ENTSOE_API_TOKEN: ${{ secrets.ENTSOE_API_TOKEN }}
         timeout-minutes: 15
         continue-on-error: true
       - name: Symbol search index (Markets autofill)

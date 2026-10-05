@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Build data/power.json for the Nordic Power tab.
 
-Sources (all free, no API key; real data only, missing values are written as null and shown as n/a):
+Sources (free; no API key except the optional ENTSO-E part; real data only, missing values are written as null and shown as n/a):
   * EEX daily settlements: the public CSV kept by MasterKano/scrape (master/eex_master.csv), read from
     raw.githubusercontent.com. Power base futures (Nordic system + zonal, DE and other EU areas),
     TTF gas, EUA, API2 coal, Guarantees of Origin (wind). History starts 1 Sep 2026 (no backfill).
@@ -10,6 +10,10 @@ Sources (all free, no API key; real data only, missing values are written as nul
     SE3, SE4, DE), then spot-hinta.fi (today/tomorrow only). Daily averages from earlier runs are kept.
   * Generation per bidding zone (Energy-Charts public_power, when available) for computed capture prices.
   * Hydro: NVE magasinstatistikk API (Norway, weekly). Sweden: Energiföretagen weekly PDF snapshot.
+  * Svenska kraftnät (no key): Kontrollrummet consumption forecast/outcome and solar plans per bidding area,
+    Sweden production by type, and data.svk.se physical flows (CC BY 4.0) into / out of SE4.
+  * Optional: ENTSO-E Transparency (load, generation per type, wind/solar forecast) for SE4, only when the
+    env var ENTSOE_API_TOKEN is set (GitHub secret of the same name); skipped silently otherwise.
 
 Usage: python scripts/build_power.py [--out data/power.json] [--skip-spot] [--eex-csv PATH]
 """
@@ -420,6 +424,240 @@ def build_hydro_se():
                 mean_period="1960-2025")
 
 
+# ------------------------------------------------------------------ Svenska kraftnät (free, no key)
+SVK_CR = "https://www.svk.se/services/controlroom/v2"
+SVK_DS = "https://data.svk.se/api/3/action/datastore_search"
+SVK_FLOWS = "4aa94b88-9f42-4f0a-a6a8-8e47aadc782a"     # data.svk.se "Physical Power Flows" (CC BY 4.0), 15-min
+SVK_PROD_IDS = {"1": "total", "2": "nuclear", "3": "hydro", "4": "thermal", "5": "wind", "6": "unspecified",
+                "7": "consumption", "8": "net_export"}  # Kontrollrummet production graph series ids (Sweden)
+SE_ZONES = ["SE1", "SE2", "SE3", "SE4"]
+
+
+def _svk_json(url, params):
+    r = get(url, tries=2, params=params, headers={"Accept": "application/json"})
+    return r.json()
+
+
+def _xy_series(data):
+    """Kontrollrummet [{x: ms UTC, y: MW}] -> pd.Series (UTC)."""
+    pts = [(p["x"], p["y"]) for p in data or [] if p.get("y") is not None]
+    if not pts:
+        return None
+    return pd.Series([v for _, v in pts], index=pd.to_datetime([t for t, _ in pts], unit="ms", utc=True), dtype="float64")
+
+
+def build_svk(today):
+    """Svenska kraftnät open data for the SE4 section (all keyless):
+      * Kontrollrummet 'situation': consumption forecast ('planned') and outcome ('result') per bidding area, hourly.
+      * Kontrollrummet 'productionplans': solar production plans per bidding area (balance-responsible parties).
+      * Kontrollrummet 'production': Sweden-wide production by type (nuclear, hydro, thermal, wind, unspecified),
+        consumption and net export, 15-min. Not split by bidding area at source.
+      * data.svk.se Physical Power Flows (CC BY 4.0): flows into / out of SE4 per border, 15-min.
+    Each part is optional; failures are listed in svk.errors and the page shows n/a for that part."""
+    t0 = dt.datetime.combine(today - dt.timedelta(days=6), dt.time(), CET).astimezone(UTC)
+    t1 = dt.datetime.combine(today + dt.timedelta(days=2), dt.time(), CET).astimezone(UTC)
+    idx = pd.date_range(t0, t1, freq="1h", inclusive="left", tz="UTC")
+    days = [today + dt.timedelta(days=i) for i in range(-6, 2)]
+    res = dict(source="Svenska kraftnät", t0=idx[0].isoformat().replace("+00:00", "Z"), n=len(idx), zones={}, errors=[])
+    hourly = lambda s: [rnd(v, 0) for v in s.resample("1h").mean().reindex(idx)] if s is not None and len(s) else None
+
+    def call(what, fn):
+        try:
+            return fn()
+        except Exception as e:
+            res["errors"].append(dict(part=what, error=str(e)[:160]))
+            log(f"svk {what}: {e}")
+            return None
+        finally:
+            time.sleep(0.3)
+
+    # consumption per bidding area (SE4: 8 days; SE1-SE3: yesterday/today/tomorrow for the zone split)
+    for z in SE_ZONES:
+        plan, act = [], []
+        for d in (days if z == "SE4" else days[-3:]):
+            js = call(f"situation {z} {d}", lambda: _svk_json(f"{SVK_CR}/situation", dict(date=d.isoformat(), biddingArea=z)))
+            for ser in (js or {}).get("Data") or []:
+                s_ = _xy_series(ser.get("data"))
+                if s_ is not None:
+                    (plan if ser.get("id") == "planned" else act if ser.get("id") == "result" else []).append(s_)
+        zr = {}
+        if plan:
+            zr["load_plan"] = hourly(pd.concat(plan).sort_index().groupby(level=0).last())
+        if act:
+            zr["load"] = hourly(pd.concat(act).sort_index().groupby(level=0).last())
+        # solar production plans (today + tomorrow)
+        sol = []
+        for d in days[-2:]:
+            js = call(f"productionplans {z} {d}", lambda: _svk_json(f"{SVK_CR}/productionplans", dict(date=d.isoformat(), biddingArea=z)))
+            rows = [x for x in (js or {}).get("data") or [] if x.get("productionPlanResource") == "SOLENERGI" and x.get("value") is not None]
+            if rows:
+                sol.append(pd.Series([x["value"] for x in rows], index=pd.to_datetime([x["dateTime"] for x in rows], utc=True), dtype="float64"))
+        if sol:
+            zr["solar_plan"] = hourly(pd.concat(sol).sort_index().groupby(level=0).last())
+        if zr:
+            res["zones"][z] = zr
+
+    # Sweden production by type
+    prod = {}
+    for d in days[:-1]:
+        js = call(f"production SE {d}", lambda: _svk_json(f"{SVK_CR}/production", dict(date=d.isoformat(), countryCode="SE")))
+        for ser in (js or {}).get("Data") or []:
+            k = SVK_PROD_IDS.get(str(ser.get("id")))
+            s_ = _xy_series(ser.get("data"))
+            if k and s_ is not None:
+                prod.setdefault(k, []).append(s_)
+    if prod:
+        res["se"] = {k: hourly(pd.concat(v).sort_index().groupby(level=0).last()) for k, v in prod.items()}
+
+    # SE4 physical flows per border (positive = import into SE4)
+    def flows():
+        since = t0.strftime("%Y-%m-%dT%H:%M:%S")
+        net = {}
+        for side, sign in (("to_bidding_zone", 1), ("from_bidding_zone", -1)):
+            js = _svk_json(SVK_DS, dict(resource_id=SVK_FLOWS, limit=32000, sort="start_time_utc asc",
+                                        filters=json.dumps({side: "SE4", "start_time_utc": {"gte": since}})))
+            if not js.get("success"):
+                raise IOError("datastore_search failed")
+            for r in js["result"]["records"]:
+                other = r["from_bidding_zone"] if sign > 0 else r["to_bidding_zone"]
+                if other == "SE4" or r.get("power") is None:
+                    continue
+                net.setdefault(other.replace("DELU", "DE-LU"), []).append((r["start_time_utc"], sign * float(r["power"])))
+        out = {}
+        for k, rows in net.items():
+            s_ = pd.Series([v for _, v in rows], index=pd.to_datetime([t for t, _ in rows], utc=True), dtype="float64")
+            out[k] = hourly(s_.groupby(level=0).sum())
+        return out
+    fl = call("flows SE4", flows)
+    if fl:
+        res["flows_se4"] = fl
+    if not res["zones"] and not res.get("se") and not res.get("flows_se4"):
+        raise RuntimeError("; ".join(e["error"] for e in res["errors"][:3])[:300] or "no SVK data")
+    return res
+
+
+# ------------------------------------------------------------------ ENTSO-E (optional, needs a free API token)
+ENTSOE_API = "https://web-api.tp.entsoe.eu/api"
+ENTSOE_EIC = {"SE1": "10Y1001A1001A44P", "SE2": "10Y1001A1001A45N", "SE3": "10Y1001A1001A46L",
+              "SE4": "10Y1001A1001A47J", "DK2": "10YDK-2--------M", "DE-LU": "10Y1001A1001A82H"}
+PSR = {"B19": "wind_on", "B18": "wind_off", "B16": "solar", "B14": "nuclear", "B12": "hydro_res", "B11": "hydro_ror",
+       "B10": "hydro_pump", "B04": "gas", "B01": "biomass", "B17": "waste", "B20": "other"}
+_RES = {"PT15M": 15, "PT30M": 30, "PT60M": 60}
+
+
+def _strip_ns(xml_text):
+    import xml.etree.ElementTree as ET
+    root = ET.fromstring(xml_text)
+    for el in root.iter():
+        if "}" in el.tag:
+            el.tag = el.tag.split("}", 1)[1]
+    return root
+
+
+def entsoe_parse(xml_text):
+    """ENTSO-E GL/Publication XML -> list of (psrType or None, in_domain?, pd.Series UTC). Handles A03 curves
+    (omitted positions repeat the previous value) and 15/30/60-min resolutions."""
+    root = _strip_ns(xml_text)
+    if root.tag.startswith("Acknowledgement"):
+        reason = " ".join((t.text or "") for t in root.iter("text")).strip()
+        raise LookupError(reason[:160] or "no data")
+    out = []
+    for ts in root.iter("TimeSeries"):
+        psr = ts.findtext("MktPSRType/psrType")
+        is_in = ts.find("inBiddingZone_Domain.mRID") is not None or ts.find("outBiddingZone_Domain.mRID") is None
+        for per in ts.iter("Period"):
+            start = pd.Timestamp(per.findtext("timeInterval/start")).tz_convert("UTC")
+            end = pd.Timestamp(per.findtext("timeInterval/end")).tz_convert("UTC")
+            step = _RES.get(per.findtext("resolution") or "", 60)
+            n = int((end - start).total_seconds() // (step * 60))
+            pts = {int(p.findtext("position")): float(p.findtext("quantity")) for p in per.iter("Point")}
+            vals, last = [], None
+            for i in range(1, n + 1):
+                last = pts.get(i, last)
+                vals.append(last)
+            idx = pd.date_range(start, periods=n, freq=f"{step}min")
+            out.append((psr, is_in, pd.Series(vals, index=idx, dtype="float64")))
+    return out
+
+
+def entsoe_get(token, params):
+    p = dict(params, securityToken=token)
+    r = S.get(ENTSOE_API, params=p, timeout=60)
+    if r.status_code == 401:
+        raise PermissionError("ENTSO-E rejected the token (HTTP 401)")
+    if r.status_code not in (200, 400):
+        raise IOError(f"HTTP {r.status_code}")
+    return entsoe_parse(r.text)
+
+
+def _hourly(series_list):
+    if not series_list:
+        return None
+    s = pd.concat(series_list, axis=1).sum(axis=1, min_count=1) if len(series_list) > 1 else series_list[0]
+    s = s[~s.index.duplicated(keep="last")].sort_index()
+    return s.resample("1h").mean()
+
+
+def build_entsoe(today):
+    """Optional ENTSO-E Transparency data (load, generation per type, wind/solar forecast) for the focus zone(s).
+    Needs env ENTSOE_API_TOKEN (GitHub Actions secret of the same name). Without it this returns a 'disabled'
+    stub and the page simply hides the panel; nothing fails."""
+    token = (os.environ.get("ENTSOE_API_TOKEN") or "").strip()
+    zones = [z.strip() for z in (os.environ.get("ENTSOE_ZONES") or "SE4").split(",") if z.strip() in ENTSOE_EIC]
+    if not token:
+        log("entsoe: ENTSOE_API_TOKEN not set - skipped")
+        return dict(enabled=False, reason="not configured")
+    t0 = dt.datetime.combine(today - dt.timedelta(days=7), dt.time(), CET).astimezone(UTC)
+    t1 = dt.datetime.combine(today + dt.timedelta(days=2), dt.time(), CET).astimezone(UTC)
+    span = dict(periodStart=t0.strftime("%Y%m%d%H%M"), periodEnd=t1.strftime("%Y%m%d%H%M"))
+    res = dict(enabled=True, source="ENTSO-E Transparency Platform", zones={}, errors=[])
+    for z in zones:
+        eic = ENTSOE_EIC[z]
+        zr, hourly = {}, {}
+        queries = {
+            "load": dict(documentType="A65", processType="A16", outBiddingZone_Domain=eic),
+            "load_fc": dict(documentType="A65", processType="A01", outBiddingZone_Domain=eic),
+            "gen": dict(documentType="A75", processType="A16", in_Domain=eic),
+            "ws_fc": dict(documentType="A69", processType="A01", in_Domain=eic),
+        }
+        for key, q in queries.items():
+            try:
+                rows = entsoe_get(token, dict(q, **span))
+                if key in ("load", "load_fc"):
+                    hourly[key] = _hourly([s for _, _, s in rows])
+                elif key == "gen":
+                    by = {}
+                    for psr, is_in, s in rows:
+                        if is_in:
+                            by.setdefault(PSR.get(psr, "other"), []).append(s)
+                    for k, lst in by.items():
+                        hourly["gen_" + k] = _hourly(lst)
+                    tot = [h for k, h in hourly.items() if k.startswith("gen_") and h is not None]
+                    if tot:
+                        hourly["gen_total"] = pd.concat(tot, axis=1).sum(axis=1, min_count=1)
+                else:
+                    by = {}
+                    for psr, _, s in rows:
+                        by.setdefault(PSR.get(psr, "other"), []).append(s)
+                    for k, lst in by.items():
+                        hourly["fc_" + k] = _hourly(lst)
+                log(f"entsoe {z} {key}: ok")
+            except Exception as e:
+                res["errors"].append(dict(zone=z, query=key, error=str(e)[:160]))
+                log(f"entsoe {z} {key}: {e}")
+            time.sleep(0.5)
+        if not hourly:
+            continue
+        idx = pd.date_range(t0, t1, freq="1h", inclusive="left", tz="UTC")
+        zr["t0"] = idx[0].isoformat().replace("+00:00", "Z")
+        zr["unit"] = "MW (hourly mean)"
+        zr["series"] = {k: [rnd(v, 0) for v in h.reindex(idx)] for k, h in sorted(hourly.items()) if h is not None}
+        res["zones"][z] = zr
+    if not res["zones"] and res["errors"]:
+        raise RuntimeError("; ".join(e["error"] for e in res["errors"])[:300])
+    return res
+
+
 def merge_spot_history(spot, prev, today):
     """Keep daily averages from earlier runs (so 7d/30d survive a source outage); newest run wins per day."""
     keep_from = (today - dt.timedelta(days=40)).isoformat()
@@ -483,6 +721,8 @@ def main():
             out["capture"] = section("capture", build_capture, raw, today)
         else:
             out["spot"] = None
+    out["svk"] = section("svk", build_svk, today)
+    out["entsoe"] = section("entsoe", build_entsoe, today) or dict(enabled=False, reason="failed")
     ok_parts = [k for k in ("eex",) if out.get(k)] + (["spot"] if out.get("spot") and out["spot"].get("zones") else []) \
         + (["hydro"] if hydro else [])
     if not ok_parts:
