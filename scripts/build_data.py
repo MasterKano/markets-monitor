@@ -128,6 +128,148 @@ def clean(df):
     return df
 
 
+
+
+# ------------------------------------------------------------------ fundamentals (mcap / EV) + FX -> EUR
+MAJOR = {"GBp": "GBP", "ILA": "ILS", "ZAc": "ZAR", "KWF": "KWD"}  # Yahoo minor units -> FX major
+FX_CCYS = ("USD", "NOK", "SEK", "DKK", "GBP", "CAD", "CHF", "JPY", "HKD", "AUD", "SGD", "NZD", "PLN", "CZK", "HUF", "TRY", "MXN", "BRL", "INR", "KRW", "TWD", "CNY", "ZAR", "ILS")
+
+
+def yahoo_crumb(session):
+    """Cookie + crumb for Yahoo quoteSummary (chart API does not need it)."""
+    try:
+        session.get("https://fc.yahoo.com", timeout=15)
+        r = session.get("https://query1.finance.yahoo.com/v1/test/getcrumb", timeout=15)
+        if r.status_code == 200 and r.text and " " not in r.text and "<" not in r.text:
+            return r.text.strip()
+    except Exception as e:
+        log(f"crumb: {e}")
+    return None
+
+
+def _raw(d, key):
+    if not d:
+        return None
+    v = d.get(key)
+    if isinstance(v, dict):
+        v = v.get("raw")
+    try:
+        return float(v) if v is not None else None
+    except Exception:
+        return None
+
+
+def fetch_fundamentals(sym, crumb, tries=4):
+    """Yahoo quoteSummary -> (marketCap, enterpriseValue, currency) or raise."""
+    last_err = None
+    for i in range(tries):
+        host = ("query1", "query2")[i % 2]
+        url = f"https://{host}.finance.yahoo.com/v10/finance/quoteSummary/{sym}"
+        try:
+            params = dict(modules="price,defaultKeyStatistics,summaryDetail")
+            if crumb:
+                params["crumb"] = crumb
+            r = SESSION.get(url, params=params, timeout=25)
+            if r.status_code in (401, 403) and i == 0:
+                # refresh crumb once
+                crumb = yahoo_crumb(SESSION)
+                params["crumb"] = crumb
+                r = SESSION.get(url, params=params, timeout=25)
+            if r.status_code in (429, 500, 502, 503, 504) or r.status_code >= 400:
+                raise IOError(f"HTTP {r.status_code}")
+            res = ((r.json().get("quoteSummary") or {}).get("result") or [None])[0]
+            if not res:
+                raise LookupError(str((r.json().get("quoteSummary") or {}).get("error"))[:120])
+            price = res.get("price") or {}
+            ks = res.get("defaultKeyStatistics") or {}
+            sd = res.get("summaryDetail") or {}
+            mcap = _raw(price, "marketCap") or _raw(sd, "marketCap")
+            ev = _raw(ks, "enterpriseValue")
+            ccy = price.get("currency") or sd.get("currency")
+            return mcap, ev, ccy
+        except LookupError as e:
+            last_err = e
+            break
+        except Exception as e:
+            last_err = e
+            time.sleep(min(20, 2 ** (i + 1)) + random.uniform(0, 0.8))
+    raise RuntimeError(f"fundamentals failed: {last_err}")
+
+
+def fetch_fx_yahoo(ccy):
+    """Units of `ccy` per 1 EUR via Yahoo EUR{CCY}=X. Returns (rate, asof_iso) or None."""
+    if ccy == "EUR":
+        return 1.0, dt.datetime.now(UTC).date().isoformat()
+    pair = f"EUR{ccy}=X"
+    try:
+        df, meta = fetch_chart(pair, years=1, tries=3)
+        px = meta.get("regularMarketPrice")
+        if px is None and not df.empty:
+            px = float(df["close"].iloc[-1])
+        if px is None or not (px > 0):
+            return None
+        ts = meta.get("regularMarketTime")
+        asof = (dt.datetime.fromtimestamp(ts, UTC).date().isoformat() if ts
+                else (df.index[-1].strftime("%Y-%m-%d") if len(df) else None))
+        return float(px), asof
+    except Exception as e:
+        log(f"  FX {pair}: Yahoo failed ({e})")
+        return None
+
+
+def fetch_fx_ecb(ccy):
+    """ECB SDW mid: units of `ccy` per 1 EUR. Returns (rate, asof_iso) or None."""
+    if ccy == "EUR":
+        return 1.0, dt.datetime.now(UTC).date().isoformat()
+    url = f"https://data-api.ecb.europa.eu/service/data/EXR/D.{ccy}.EUR.SP00.A"
+    try:
+        r = SESSION.get(url, params={"lastNObservations": 5, "format": "jsondata"},
+                        timeout=20, headers={"Accept": "application/json"})
+        if r.status_code >= 400:
+            raise IOError(f"HTTP {r.status_code}")
+        js = r.json()
+        obs = js["dataSets"][0]["series"]["0:0:0:0:0"]["observations"]
+        dims = js["structure"]["dimensions"]["observation"][0]["values"]
+        # pick latest non-null
+        best = None
+        for k, v in obs.items():
+            if v and v[0] is not None:
+                best = (float(v[0]), dims[int(k)]["id"])
+        return best
+    except Exception as e:
+        log(f"  FX {ccy}: ECB failed ({e})")
+        return None
+
+
+def build_fx_table(needed):
+    """Map ISO currency -> {rate, asof, src} where rate = units of ccy per 1 EUR."""
+    out = {"EUR": dict(rate=1.0, asof=dt.datetime.now(UTC).date().isoformat(), src="identity")}
+    for ccy in sorted(needed):
+        if ccy == "EUR":
+            continue
+        got = fetch_fx_yahoo(ccy)
+        if got:
+            out[ccy] = dict(rate=rnd(got[0], 6), asof=got[1], src="yahoo")
+            continue
+        got = fetch_fx_ecb(ccy)
+        if got:
+            out[ccy] = dict(rate=rnd(got[0], 6), asof=got[1], src="ecb")
+        else:
+            log(f"  FX {ccy}: unavailable")
+        time.sleep(0.15)
+    return out
+
+
+def to_eur(val, ccy, fx_table):
+    if val is None:
+        return None
+    major = MAJOR.get(ccy, ccy) or "EUR"
+    info = fx_table.get(major)
+    if not info or not info.get("rate"):
+        return None
+    return rnd(float(val) / float(info["rate"]), 0)  # whole euros
+
+
 # ------------------------------------------------------------------ analytics
 def rnd(x, n=4):
     if x is None:
@@ -152,7 +294,7 @@ def base_on_or_before(c, when):
     return None if s.empty else float(s.iloc[-1])
 
 
-def analyse(spec, df, meta, src, now):
+def analyse(spec, df, meta, src, now, fund=None, fx_table=None):
     c, v = df["close"], df["volume"]
     last_date = c.index[-1]
     px = float(c.iloc[-1])
@@ -234,6 +376,20 @@ def analyse(spec, df, meta, src, now):
     out["spark"] = [sig(x) for x in pts]
     out["spark_from"] = s.index[0].strftime("%Y-%m-%d") if len(s) else None
     out["roll"] = spec.get("kind") == "future"
+
+    # Market cap / enterprise value (equities & ETFs), converted to EUR when FX is known
+    kind = spec.get("kind", "equity")
+    out["mcap"] = out["mcap_eur"] = out["ev"] = out["ev_eur"] = None
+    out["mcap_ccy"] = None
+    if fund and kind in ("equity", "etf"):
+        mcap, ev, fcy = fund
+        ccy = fcy or out.get("ccy")
+        out["mcap"] = sig(mcap, 6) if mcap is not None else None
+        out["ev"] = sig(ev, 6) if ev is not None else None
+        out["mcap_ccy"] = ccy
+        if fx_table:
+            out["mcap_eur"] = to_eur(mcap, ccy, fx_table)
+            out["ev_eur"] = to_eur(ev, ccy, fx_table)
     return out
 
 
@@ -272,6 +428,33 @@ def main():
         log(f"Only {len(cache)}/{len(syms)} symbols fetched - not overwriting {a.out}")
         return 2
 
+    # Fundamentals (mcap / EV) for equities & ETFs
+    crumb = yahoo_crumb(SESSION)
+    funds = {}
+    fund_kinds = {"equity", "etf"}
+    fund_syms = [s for s in syms if specs[s].get("kind", "equity") in fund_kinds and s in cache]
+    for i, sym in enumerate(fund_syms):
+        try:
+            funds[sym] = fetch_fundamentals(sym, crumb)
+            log(f"  fund [{i+1}/{len(fund_syms)}] {sym}: mcap={funds[sym][0]} ev={funds[sym][1]} {funds[sym][2]}")
+        except Exception as e:
+            log(f"  fund [{i+1}/{len(fund_syms)}] {sym}: {e}")
+        time.sleep(a.sleep * 0.5 + random.uniform(0, 0.15))
+
+    # FX -> EUR (Yahoo, ECB mid fallback)
+    needed = set()
+    for sym, trip in funds.items():
+        ccy = trip[2] or (cache[sym][1] or {}).get("currency")
+        if ccy:
+            needed.add(MAJOR.get(ccy, ccy))
+    for sym, (df, meta, src) in cache.items():
+        ccy = meta.get("currency")
+        if ccy:
+            needed.add(MAJOR.get(ccy, ccy))
+    needed.discard(None)
+    fx_table = build_fx_table(needed)
+    log(f"FX table: { {k: v['rate'] for k, v in fx_table.items()} }")
+
     groups = []
     for g in GROUPS:
         gs = dict(id=g["id"], label=g["label"], sections=[])
@@ -283,7 +466,7 @@ def main():
                 if spec["sym"] in cache:
                     df, meta, src = cache[spec["sym"]]
                     try:
-                        row = analyse(spec, df, meta, src, now)
+                        row = analyse(spec, df, meta, src, now, fund=funds.get(spec['sym']), fx_table=fx_table)
                     except Exception as e:
                         row = dict(sym=spec["sym"], name=spec["name"], tv=spec.get("tv"), kind=spec.get("kind"),
                                    note=spec.get("note"), error=f"analysis failed: {e}"[:200])
@@ -296,16 +479,21 @@ def main():
             gs["sections"].append(dict(label=sec.get("label"), note=sec.get("note"), rows=rows))
         groups.append(gs)
 
+    fx_asof = sorted({v["asof"] for v in fx_table.values() if v.get("asof")})
     out = dict(
         generated_utc=now.isoformat(timespec="seconds"),
         generated_geneva=now.astimezone(GENEVA).isoformat(timespec="seconds"),
-        source="Yahoo Finance daily bars (chart API; yfinance fallback). Price returns, not total return.",
+        source="Yahoo Finance daily bars (chart API; yfinance fallback). Price returns, not total return. Market cap / EV from Yahoo quoteSummary, converted to EUR.",
         method=dict(
             returns="Last close vs last close on/before the same calendar date N periods earlier; YTD vs prior year-end close; n/a if history is shorter.",
             volume="Last session volume vs average of the N sessions before it.",
             ma="Simple moving average of daily closes incl. the latest bar; % = price / MA - 1.",
             futures="Continuous front-month futures: long-horizon returns (esp. 10Y) include roll effects.",
+            mcap_ev="Yahoo marketCap / enterpriseValue for equities and ETFs; converted to EUR via Yahoo EUR{CCY}=X (ECB SDW mid fallback). GBp treated as GBP.",
+            prices="Yahoo quotes are typically delayed ~15 minutes on non-US venues (not live).",
         ),
+        fx_eur=fx_table,
+        fx_asof=fx_asof[-1] if fx_asof else None,
         symbols=len(syms), fetched=len(cache), seconds=round(time.time() - t0, 1),
         groups=groups, errors=errors,
     )

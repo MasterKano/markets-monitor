@@ -54,23 +54,20 @@
     <button class="button is-on" id="addConfirmButton" type="button">Add</button>
   </div>
   <section class="page is-on" id="tablePage">
+    <p class="delay-note" id="delayNote">Prices are delayed ~15 minutes (not live). Market cap and enterprise value in EUR.</p>
     <details class="explain" id="explain" open>
-      <summary><span class="explain-title">How to read this table</span><span class="explain-hint">Price · Volume · Moving averages</span></summary>
+      <summary><span class="explain-title">How to read this table</span><span class="explain-hint">Price · Volume · Moving averages · Cap</span></summary>
       <div class="explain-grid">
-        <div class="ex-item ex-price"><h3>Price</h3><p><b>Last</b> = Yahoo daily close (local ccy; <span class="live">live</span> if session was open at fetch). <b>Market</b> = listing venue. Price returns only (no dividends). As of <b id="exAsOf">…</b>.</p></div>
-        <div class="ex-item ex-vol"><h3>Volume</h3><p>Ratio = last ÷ N-day average (5/10/20/50). <b>1.0×</b> = average day; <span class="hot-key">&gt; 1.5×</span> highlighted. Grey figure = N-day avg volume.</p></div>
-        <div class="ex-item ex-ma"><h3>Moving averages</h3><p>% vs N-day SMA: <span class="up">+%</span> above <i class="dot above"></i>, <span class="dn">−%</span> below <i class="dot below"></i>. Yields in bp.</p></div>
+        <div class="ex-item ex-price"><h3>Price</h3><p><b>Last</b> = Yahoo daily close (local ccy; delayed ~15 min). Price returns only (no dividends). As of <b id="exAsOf">…</b>.</p></div>
+        <div class="ex-item ex-vol"><h3>Volume</h3><p>Ratio = last ÷ N-day average (5/20/50). <b>1.0×</b> = average day; <span class="hot-key">&gt; 1.5×</span> highlighted. Grey figure = N-day avg volume.</p></div>
+        <div class="ex-item ex-ma"><h3>Moving averages &amp; cap</h3><p>% vs N-day SMA: <span class="up">+%</span> above <i class="dot above"></i>, <span class="dn">−%</span> below <i class="dot below"></i>. <b>Mkt cap</b> / <b>EV</b> in EUR (Yahoo; FX as of <b id="exFxAsOf">…</b>). Yields in bp.</p></div>
       </div>
     </details>
     <div class="tbl-tabs" id="tblTabs" role="tablist" aria-label="Instrument groups"></div>
     <div class="tbl-bar">
-      <div class="seg" role="group" aria-label="Column density">
-        <button class="button" id="compactBtn" type="button">Compact</button>
-        <button class="button" id="fullBtn" type="button">Full</button>
-      </div>
-      <div class="tgls" role="group" aria-label="Column groups">
-        <button class="button tgl" id="volBtn" type="button" aria-pressed="false" title="Show / hide the Volume columns"><span class="sw" aria-hidden="true"></span>Volume</button>
-        <button class="button tgl" id="maBtn" type="button" aria-pressed="false" title="Show / hide the Moving average columns"><span class="sw" aria-hidden="true"></span>Moving avg</button>
+      <div class="seg mode-seg" role="group" aria-label="Column mode">
+        <button class="button" id="priceModeBtn" type="button" aria-pressed="true" title="Show price-return columns">Price</button>
+        <button class="button" id="volMaModeBtn" type="button" aria-pressed="false" title="Show volume and moving-average columns">Volume + MA</button>
       </div>
       <input id="tblFilter" class="tbl-filter" type="search" placeholder="Filter names" autocomplete="off" spellcheck="false">
       <span class="toolbar-spacer"></span>
