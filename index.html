@@ -24,9 +24,8 @@
     </div>
   </header>
   <div class="toolbar">
-    <button class="button is-on" id="pageTable" type="button">Table</button>
-    <button class="button" id="pageMonitor" type="button">Monitor</button>
-    <button class="button" id="pageEquities" type="button">Equities</button>
+    <button class="button is-on" id="pageTable" type="button" aria-pressed="true">Table</button>
+    <button class="button" id="pageMonitor" type="button" aria-pressed="false">Monitor</button>
     <label class="field" for="intervalSelect"><span class="field-label">Interval</span>
       <select id="intervalSelect">
         <option value="60">1 hour</option><option value="240">4 hour</option>
@@ -88,36 +87,14 @@
     </section>
   </section>
   <section class="page" id="monitorPage">
-    <div class="mobile-nav">
+    <div class="mobile-nav" aria-label="Chart navigation">
       <button class="button" id="prevPanelButton" type="button">Prev</button>
       <strong id="mobilePanelLabel">Markets</strong>
       <button class="button" id="nextPanelButton" type="button">Next</button>
     </div>
     <main class="dashboard" id="dashboard"></main>
   </section>
-  <section class="page" id="equitiesPage">
-    <div class="equity-wrap">
-      <div class="search-box">
-        <input id="equitySearch" type="search" placeholder="Search a stock" autocomplete="off" spellcheck="false">
-        <div class="suggest" id="equitySuggest" hidden></div>
-      </div>
-      <div class="chips" id="equityChips"></div>
-      <section class="equity-panel">
-        <div class="panel-head">
-          <div>
-            <span class="panel-label">Equities</span>
-            <strong class="panel-title" id="equityTitle">Apple</strong>
-            <div class="panel-meta" id="equityMeta">NASDAQ:AAPL</div>
-          </div>
-        </div>
-        <div class="chart-stage">
-          <div class="chart" id="chart_equity"></div>
-          <div class="chart-status" id="status_equity">Loading…</div>
-        </div>
-      </section>
-    </div>
-  </section>
-  <footer>Table: Yahoo Finance daily data via GitHub Actions. Nordic Power: EEX settlements, Energy-Charts (CC BY 4.0) day-ahead prices, NVE hydro. <span id="footStamp"></span> Charts: TradingView widgets; bond yields blocked in widgets, so Monitor rates use ETFs. Equities search uses TV lookup when allowed.</footer>
+  <footer>Table: Yahoo Finance daily data via GitHub Actions. Nordic Power: EEX settlements, Energy-Charts (CC BY 4.0) day-ahead prices, NVE hydro. <span id="footStamp"></span> Charts: TradingView widgets. Treasury yields cannot be embedded, so Monitor Rates uses bond ETFs and Table yield rows open a Yahoo 1Y chart. Markets search uses a built-in list (works offline) plus TradingView lookup when reachable.</footer>
 </div>
 <div class="sr-only" id="appStatus" role="status"></div>
 <div class="modal" id="chartModal" hidden role="dialog" aria-modal="true" aria-labelledby="cmTitle">
