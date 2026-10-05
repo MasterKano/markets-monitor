@@ -35,10 +35,10 @@ function fst(v,d=2){if(!isNum(v))return"n/a";return(v>0?"+":v<0?"−":"")+Math.a
 function ago(iso){const m=(Date.now()-new Date(iso).getTime())/6e4;if(!isFinite(m))return"";if(m<1)return"just now";if(m<60)return Math.round(m)+"m ago";if(m<48*60)return Math.round(m/60)+"h ago";return Math.round(m/1440)+"d ago";}
 
 /* ---------- price colour scale (EUR/MWh, fixed so days are comparable) ---------- */
-const STOPS=[[-40,[86,104,255]],[0,[45,160,170]],[40,[78,184,104]],[80,[226,196,84]],[130,[240,136,72]],[200,[229,72,77]],[300,[158,28,92]]];
+const STOPS=[[-40,[196,48,58]],[-10,[229,72,77]],[0,[180,140,70]],[25,[78,184,104]],[60,[45,160,120]],[100,[56,140,200]],[160,[70,110,230]],[250,[86,104,255]],[350,[50,70,200]]];
 function pcol(v,a){if(!isNum(v))return"transparent";let i=0;while(i<STOPS.length-2&&v>STOPS[i+1][0])i++;const[x0,c0]=STOPS[i],[x1,c1]=STOPS[i+1];const t=Math.max(0,Math.min(1,(v-x0)/(x1-x0)));const c=c0.map((q,j)=>Math.round(q+(c1[j]-q)*t));return a==null?"rgb("+c+")":"rgba("+c+","+a+")";}
-function ink(v){if(!isNum(v))return"";return v>55&&v<150?"#10141c":"#fff";}
-function legend(){const xs=[-40,0,40,80,130,200,300];return'<div class="pw-legend"><span class="pw-lg-bar" style="background:linear-gradient(90deg,'+xs.map((x,i)=>pcol(x)+" "+(i/(xs.length-1)*100).toFixed(0)+"%").join(",")+')"></span><span class="pw-lg-ticks">'+xs.map(x=>"<i>"+(x<0?"−"+(-x):x)+"</i>").join("")+'</span><span class="pw-lg-unit">EUR/MWh</span></div>';}
+function ink(v){if(!isNum(v))return"";return (v>=15&&v<95)?"#10141c":"#fff";}
+function legend(){const xs=[-40,0,40,100,160,250,350];return'<div class="pw-legend"><span class="pw-lg-bar" style="background:linear-gradient(90deg,'+xs.map((x,i)=>pcol(x)+" "+(i/(xs.length-1)*100).toFixed(0)+"%").join(",")+')"></span><span class="pw-lg-ticks">'+xs.map(x=>"<i>"+(x<0?"−"+(-x):x)+"</i>").join("")+'</span><span class="pw-lg-unit">EUR/MWh</span></div>';}
 
 /* ---------- tooltip ---------- */
 let tip;function showTip(html,e){if(!tip){tip=document.createElement("div");tip.className="pw-tip";document.body.append(tip);}tip.innerHTML=html;tip.hidden=false;const r=tip.getBoundingClientRect();let x=e.clientX+14,y=e.clientY+14;if(x+r.width>innerWidth-8)x=e.clientX-r.width-14;if(y+r.height>innerHeight-8)y=e.clientY-r.height-14;tip.style.left=Math.max(6,x)+"px";tip.style.top=Math.max(6,y)+"px";}
