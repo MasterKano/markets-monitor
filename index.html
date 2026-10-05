@@ -79,8 +79,9 @@
     <div class="movers" id="tblMovers"></div>
     <div class="tbl-wrap" id="tblWrap"><table class="mtable" id="tbl"></table></div>
     <p class="tbl-foot" id="tblFoot"></p>
+    <nav class="pw-subnav" id="pwSubnav" aria-label="Nordic Power sections"></nav>
     <div class="power-view" id="powerView"></div>
-    <section class="news-panel" aria-labelledby="newsTitle">
+    <section class="news-panel" id="pwNews" aria-labelledby="newsTitle">
       <div class="news-head"><h2 id="newsTitle">News</h2><span class="news-meta" id="newsMeta"></span></div>
       <ol class="news-list" id="newsList"></ol>
       <p class="news-note">Headlines via Google News RSS and official exchange feeds (Oslo Børs NewsWeb, Nasdaq Nordic). Links open the publisher in a new tab. Times in Geneva time.</p>
@@ -94,7 +95,7 @@
     </div>
     <main class="dashboard" id="dashboard"></main>
   </section>
-  <footer>Table: Yahoo Finance daily data via GitHub Actions. Nordic Power: EEX settlements, Energy-Charts (CC BY 4.0) day-ahead prices, NVE hydro. <span id="footStamp"></span> Charts: TradingView widgets. Treasury yields cannot be embedded, so Monitor Rates uses bond ETFs and Table yield rows open a Yahoo 1Y chart. Markets search uses a static symbol index (LSE/AIM, OMX Stockholm, Oslo, NYSE/Nasdaq, TSX/TSXV, HKEX; works offline). TradingView lookup is tried when reachable; exotic names may need EXCH:SYM or in-chart search.</footer>
+  <footer>Table: Yahoo Finance daily data via GitHub Actions. Nordic Power: EEX settlements, Energy-Charts (CC BY 4.0) day-ahead prices, NVE hydro, Svenska kraftnät SE4 load/flows (ENTSO-E when enabled). <span id="footStamp"></span> Charts: TradingView widgets. Treasury yields cannot be embedded, so Monitor Rates uses bond ETFs and Table yield rows open a Yahoo 1Y chart. Markets search uses a static symbol index (LSE/AIM, OMX Stockholm, Oslo, NYSE/Nasdaq, TSX/TSXV, HKEX; works offline). TradingView lookup is tried when reachable; exotic names may need EXCH:SYM or in-chart search.</footer>
 </div>
 <div class="sr-only" id="appStatus" role="status"></div>
 <div class="modal" id="chartModal" hidden role="dialog" aria-modal="true" aria-labelledby="cmTitle">

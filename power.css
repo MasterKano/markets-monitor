@@ -108,3 +108,43 @@ body.is-power #tablePage .tbl-bar,body.is-power #tblMovers,body.is-power #tblWra
  .pw-bar{grid-template-columns:70px 1fr 54px}
  .pw-tools,.pw-tools>div{max-width:100%}.pw-seg{display:flex;max-width:100%;overflow-x:auto;scrollbar-width:none}.pw-seg .button{white-space:nowrap;flex:none}
 }
+
+/* sticky section nav (Spot | Forwards | Drivers | SE4 | News) */
+:root,[data-theme=dark]{--pw-se3:#c9d1de;--pw-wind:#45bd84}[data-theme=light]{--pw-se3:#3d4757;--pw-wind:#1f9a62}
+.pw-subnav{display:none}
+body.is-power .pw-subnav{position:sticky;top:0;z-index:30;display:flex;gap:4px;margin:0 0 10px;padding:6px;overflow-x:auto;scrollbar-width:none;border:1px solid var(--border);border-radius:var(--radius);background:color-mix(in srgb,var(--panel) 88%,transparent);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);box-shadow:0 8px 20px rgba(0,0,0,.18)}
+.pw-subnav::-webkit-scrollbar{display:none}
+.pw-nav-a{flex:none;padding:5px 12px;border-radius:7px;color:var(--muted);font-size:12px;font-weight:650;text-decoration:none;white-space:nowrap}
+.pw-nav-a:hover{color:var(--text);background:var(--panel-hover)}
+.pw-nav-a.is-on{color:var(--text);background:var(--accent-soft);box-shadow:inset 0 -2px 0 var(--accent)}
+.pw-nav-a.focus{color:var(--text)}.pw-nav-a.focus::before{content:"";display:inline-block;width:6px;height:6px;margin-right:6px;border-radius:50%;background:var(--accent);vertical-align:1px}
+body.is-power #explain{display:none}
+.pw-sec{scroll-margin-top:60px}
+.pw-sec-h{margin:4px 2px 8px}.pw-drivers+.pw-sec-h{margin-top:14px}
+/* SE4 KPI strip */
+.pw-kpis-focus{grid-template-columns:repeat(auto-fit,minmax(160px,1fr))}
+.pw-kpi.pw-f{border-color:color-mix(in srgb,var(--accent) 45%,var(--border));background:linear-gradient(160deg,color-mix(in srgb,var(--accent) 16%,var(--panel)),var(--panel) 70%)}
+.pw-kpis-nordic .pw-kpi{padding:7px 10px}.pw-kpis-nordic .pw-kpi b{font-size:16px}
+/* SE4 section */
+.pw-grid-se4{grid-template-columns:minmax(0,1fr) minmax(0,1fr);margin-bottom:var(--gap)}
+.pw-heat tr.focus .c-z{color:var(--accent)}.pw-heat tr.focus td:not(.na-c){box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--accent) 70%,transparent)}
+.pw-tbl tr.focus th.c-z{color:var(--accent);box-shadow:inset 3px 0 0 var(--accent)}
+.pw-s4fw-wrap{padding:0 12px;max-height:420px;overflow-y:auto}
+#pwS4Fw tbody tr{cursor:pointer}#pwS4Fw tbody tr:hover th,#pwS4Fw tbody tr:hover td{background-color:var(--panel-hover)}
+#pwS4Fw tr.bench th.c-z{color:var(--accent)}
+#pwS4Fw thead th{position:sticky;top:0;z-index:1}
+.pw-grid-stats{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;padding:0 12px 6px}
+.pw-grid-stats div{display:flex;flex-direction:column;gap:2px;padding:6px 8px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--panel-deep)}
+.pw-grid-stats span{color:var(--faint);font-size:9.5px;font-weight:750;letter-spacing:1px;text-transform:uppercase}.pw-grid-stats b{font-size:15px;font-variant-numeric:tabular-nums}.pw-grid-stats em{color:var(--muted);font-size:10px;font-style:normal}
+@media(max-width:1100px){.pw-grid-se4{grid-template-columns:1fr}}
+@media(max-width:760px){.pw-kpis-focus{grid-template-columns:repeat(2,minmax(0,1fr))}.pw-grid-stats{grid-template-columns:repeat(2,minmax(0,1fr))}.pw-nav-a{padding:5px 10px}}
+
+/* SVK cards */
+.pw-pad{padding:0 12px}.pw-flow-wrap{padding:0 12px 4px}
+.pw-tbl td.imp{color:var(--good)}.pw-tbl td.exp{color:var(--bad)}
+.pw-mix{display:grid;gap:4px;padding:0 12px 6px}
+.pw-mix-row{display:grid;grid-template-columns:96px 1fr 60px 38px;align-items:center;gap:8px;font-size:11.5px;font-variant-numeric:tabular-nums}
+.pw-mix-row .hl{font-weight:700;white-space:nowrap}.pw-mix-row .hl i{display:inline-block;width:8px;height:8px;margin-right:6px;border-radius:2px;vertical-align:0}
+.pw-mix-row .hb{position:relative;height:10px;border-radius:5px;background:var(--panel-deep);border:1px solid var(--border);overflow:hidden}.pw-mix-row .hb i{position:absolute;left:0;top:0;bottom:0;opacity:.85}
+.pw-mix-row .hv{text-align:right;font-weight:650}.pw-mix-row .hd{text-align:right;color:var(--muted);font-size:10.5px}
+.pw-mix-sum{margin-top:2px;color:var(--muted);font-size:10.5px}
