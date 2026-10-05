@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build data/news.json: latest headlines per Table tab.
+"""Build data/news.json: latest headlines per Table tab (plus the Nordic Power tab, key "power").
 
 Sources (all free, no scraping of article pages, headline + link only):
   * Google News RSS search (news.google.com/rss/search), per company/topic query
@@ -36,6 +36,15 @@ TABS = {
                 G('"Orrön Energy" OR "Orron Energy"', r"orr[oö]n", 45), G("Ørsted OR Orsted", r"[øo]rsted", 7),
                 G("Vestas", r"vestas", 7), G("Fortum", r"fortum", 14), G('"Nord Pool" OR "Nordic power"', r"nordic|nord pool|norw|swed|finland|denmark", 21)],
         newsweb=["CLOUD", "SCATC"], nasdaq=["Eolus Aktiebolag", "Orrön Energy AB"]),
+    "power": dict(
+        google=[G('"Nordic power" OR "Nordic electricity" OR "Nordic energy"', r"^(?!.*base (week|month|quarter|year) future)(?=.*(nordic|nord pool|norw|swed|finland|finnish|danish|denmark))(?=.*(power|electric|price|energy))", 30),
+                G('"Nord Pool"', r"nord pool|power|electric|price", 14),
+                G("Statnett", r"statnett", 21), G('"Svenska kraftnät" OR "Svenska kraftnat"', r"svenska kraftn|kraftnät", 30),
+                G("Fingrid OR Energinet electricity", r"fingrid|energinet", 21),
+                G("Norway hydro reservoir", r"^(?!.*norsk hydro)(?=.*(norw|nordic|swed|scandinav))(?=.*(reservoir|hydro|magasin))", 45),
+                G("Swedish nuclear outage Forsmark OR Ringhals OR Oskarshamn", r"forsmark|ringhals|oskarshamn|olkiluoto|loviisa|^(?=.*(swed|finland|finnish|nordic)).*(nuclear|reactor)", 30),
+                G("Olkiluoto", r"olkiluoto|^(?=.*(finland|finnish)).*(nuclear|reactor)", 30)],
+        newsweb=[], nasdaq=[]),
     "energy": dict(
         google=[G("OPEC", r"opec", 5), G('"Brent crude"', r"brent|oil", 5), G("Equinor", r"equinor", 10),
                 G('"Aker BP" OR "Vår Energi"', r"aker bp|v[åa]r energi", 14), G("Shell OR TotalEnergies OR BP oil major", r"shell|totalenergies|\bbp\b", 7),

@@ -10,6 +10,7 @@ const st=Object.assign({tab:"nordic",compact:NARROW.matches,vol:null,ma:null,exp
 const save=()=>{try{localStorage.setItem(LS,JSON.stringify({tab:st.tab,compact:st.compact,vol:st.vol,ma:st.ma,explain:st.explain,sort:st.sort,dir:st.dir}));}catch(e){}};
 const showVol=()=>st.vol==null?!NARROW.matches:st.vol,showMa=()=>st.ma==null?!NARROW.matches:st.ma;
 let DATA=null,NEWS=null;
+const POWER="power";  // Nordic Power tab (power.js), not a market.json group
 const $=id=>document.getElementById(id);
 const esc=s=>String(s==null?"":s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const NA='<span class="na">n/a</span>';
@@ -95,7 +96,9 @@ function cell(c,r,S){const k=c.k,hid=c.hide?" c-opt":"";
 /* ---------- render ---------- */
 function sortRows(rs){if(!st.sort||!val[st.sort])return rs;const f=val[st.sort];return rs.slice().sort((a,b)=>{const x=f(a),y=f(b);const nx=x==null||(typeof x==="number"&&!isFinite(x)),ny=y==null||(typeof y==="number"&&!isFinite(y));if(nx&&ny)return 0;if(nx)return 1;if(ny)return-1;if(typeof x==="string")return st.dir*x.localeCompare(y);return -st.dir*(y-x);});}
 function renderTabs(){const box=$("tblTabs");box.replaceChildren();if(!DATA)return;DATA.groups.forEach(g=>{const rs=g.sections.flatMap(s=>s.rows).filter(r=>!r.error);const up=rs.filter(r=>r.pct&&r.pct["1D"]>0).length,dn=rs.filter(r=>r.pct&&r.pct["1D"]<0).length;const b=document.createElement("button");b.type="button";b.className="tbl-tab"+(g.id===st.tab?" is-on":"");b.setAttribute("role","tab");b.setAttribute("aria-selected",g.id===st.tab);
- b.innerHTML='<span>'+esc(g.label)+'</span><span class="breadth" title="'+up+' up / '+dn+' down today"><i style="width:'+(rs.length?Math.round(up/rs.length*100):0)+'%"></i></span>';b.onclick=()=>{st.tab=g.id;st.q="";$("tblFilter").value="";save();renderAll();};box.append(b);});}
+ b.innerHTML='<span>'+esc(g.label)+'</span><span class="breadth" title="'+up+' up / '+dn+' down today"><i style="width:'+(rs.length?Math.round(up/rs.length*100):0)+'%"></i></span>';b.onclick=()=>{st.tab=g.id;st.q="";$("tblFilter").value="";save();renderAll();};box.append(b);if(g.id==="nordic")box.append(powerTab());});}
+function powerTab(){const b=document.createElement("button");b.type="button";b.className="tbl-tab tab-power"+(st.tab===POWER?" is-on":"");b.setAttribute("role","tab");b.setAttribute("aria-selected",st.tab===POWER);
+ b.innerHTML='<span>Nordic Power</span><span class="breadth pw-tabbar" title="Day-ahead prices, forwards, hydro"><i></i></span>';b.onclick=()=>{st.tab=POWER;save();renderAll();};return b;}
 function renderMovers(rs){const box=$("tblMovers");const ok=rs.filter(r=>!r.error&&r.kind!=="yield"&&r.pct&&isNum(r.pct["1D"]));const uniq=[...new Map(ok.map(r=>[r.sym,r])).values()];
  if(!uniq.length){box.replaceChildren();return;}const s=uniq.slice().sort((a,b)=>b.pct["1D"]-a.pct["1D"]);const best=s[0],worst=s[s.length-1];
  const spikes=[...new Map(rs.filter(r=>r.vol&&r.vol.r20>1.5).map(r=>[r.sym,r])).values()].sort((a,b)=>b.vol.r20-a.vol.r20).slice(0,3);
@@ -123,12 +126,12 @@ function renderTable(){const tbl=$("tbl");const g=DATA.groups.find(x=>x.id===st.
  renderMovers(all);
  const futs=all.some(r=>r.roll);$("tblFoot").innerHTML='Price returns from Yahoo Finance daily closes (not total return).'+(futs?' † Continuous front-month futures: long-horizon (esp. 10Y) figures include roll effects.':"")+(st.tab==="rates"?" Yield rows show changes and MA distance in basis points.":"")+' n/a = not available from source or not enough history. Click a row for its chart.';}
 function renderStamp(){const el=$("tblStamp");if(!DATA){el.textContent="";return;}const d=new Date(DATA.generated_utc);el.innerHTML='<span class="stamp-dot"></span>Data updated <b>'+esc(gf.format(d))+'</b> Geneva · '+esc(ago(DATA.generated_utc))+(DATA.errors&&DATA.errors.length?' · <span title="'+esc(DATA.errors.map(e=>e.sym+": "+e.error).join("\n"))+'">'+DATA.errors.length+' missing</span>':"");$("footStamp").textContent="Table data updated "+gf.format(d)+" Geneva.";$("exAsOf").textContent=gf.format(d)+" Geneva";}
-function renderNews(){const box=$("newsList"),hd=$("newsTitle"),meta=$("newsMeta");const g=DATA&&DATA.groups.find(x=>x.id===st.tab);hd.textContent="News · "+(g?g.label:"");
+function renderNews(){const box=$("newsList"),hd=$("newsTitle"),meta=$("newsMeta");const g=DATA&&DATA.groups.find(x=>x.id===st.tab);hd.textContent="News · "+(st.tab===POWER?"Nordic Power":g?g.label:"");
  if(!NEWS){box.innerHTML='<li class="news-empty">News not available yet.</li>';meta.textContent="";return;}
  const items=(NEWS.tabs&&NEWS.tabs[st.tab])||[];meta.textContent="Updated "+gf.format(new Date(NEWS.generated_utc))+" Geneva";
  if(!items.length){box.innerHTML='<li class="news-empty">No recent headlines.</li>';return;}
  box.innerHTML=items.map(it=>{const u=/^https?:\/\//i.test(it.url)?it.url:"#";return'<li class="news-item'+(it.kind==="exchange"?" ex":"")+'"><time datetime="'+esc(it.time)+'">'+esc(gfs.format(new Date(it.time)))+'</time><a href="'+esc(u)+'" target="_blank" rel="noopener noreferrer">'+esc(it.title)+'</a><span class="src">'+(it.kind==="exchange"?'<span class="badge">Exchange</span>':"")+esc(it.source)+'</span></li>';}).join("");}
-function renderAll(){renderTabs();renderStamp();if(DATA)renderTable();renderNews();$("compactBtn").classList.toggle("is-on",st.compact);$("fullBtn").classList.toggle("is-on",!st.compact);
+function renderAll(){const pw=st.tab===POWER;document.body.classList.toggle("is-power",pw);renderTabs();renderStamp();if(pw){window.MMPower&&window.MMPower.show();}else{window.MMPower&&window.MMPower.hide();if(DATA)renderTable();}renderNews();$("compactBtn").classList.toggle("is-on",st.compact);$("fullBtn").classList.toggle("is-on",!st.compact);
  [["volBtn",showVol()],["maBtn",showMa()]].forEach(([id,on])=>{const b=$(id);b.classList.toggle("is-on",on);b.setAttribute("aria-pressed",on);});}
 
 /* ---------- chart modal ---------- */
@@ -151,7 +154,7 @@ async function load(){const tbl=$("tbl");if(!DATA)tbl.innerHTML='<tbody><tr><td 
  const[a,b]=await Promise.allSettled([getJSON("data/market.json"),getJSON("data/news.json")]);
  if(a.status==="fulfilled")DATA=a.value;else if(!DATA)tbl.innerHTML='<tbody><tr><td class="empty">Could not load data/market.json ('+esc(a.reason&&a.reason.message)+'). If you opened the file directly, serve the folder over HTTP.</td></tr></tbody>';
  if(b.status==="fulfilled")NEWS=b.value;
- if(DATA&&!DATA.groups.some(g=>g.id===st.tab))st.tab=DATA.groups[0].id;renderAll();}
+ if(DATA&&st.tab!==POWER&&!DATA.groups.some(g=>g.id===st.tab))st.tab=DATA.groups[0].id;renderAll();}
 $("compactBtn").onclick=()=>{st.compact=true;save();renderAll();};
 $("fullBtn").onclick=()=>{st.compact=false;save();renderAll();};
 $("volBtn").onclick=()=>{st.vol=!showVol();save();renderAll();};
@@ -162,6 +165,6 @@ let ft;$("tblFilter").addEventListener("input",e=>{clearTimeout(ft);ft=setTimeou
 $("cmClose").onclick=closeChart;$("cmSimple").onclick=()=>{const f=$("cmFallback");f.hidden=!f.hidden;$("cmSimple").classList.toggle("is-on",!f.hidden);};$("chartModal").addEventListener("click",e=>{if(e.target.id==="chartModal")closeChart();});
 document.addEventListener("keydown",e=>{if(e.key==="Escape"&&!$("chartModal").hidden)closeChart();});
 setInterval(()=>DATA&&renderStamp(),60000);
-window.MMTable={reload:load};
+window.MMTable={reload:()=>{if(st.tab===POWER&&window.MMPower)window.MMPower.reload();return load();}};
 load();
 })();
