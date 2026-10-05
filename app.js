@@ -10,7 +10,7 @@ const PANELS=[
 ];
 /* preset chips under the Markets chart */
 const HOT=[["Apple","NASDAQ:AAPL"],["Microsoft","NASDAQ:MSFT"],["Nvidia","NASDAQ:NVDA"],["Amazon","NASDAQ:AMZN"],["Meta","NASDAQ:META"],["Alphabet","NASDAQ:GOOGL"],["Tesla","NASDAQ:TSLA"],["Berkshire","NYSE:BRK.B"],["Nestle","SIX:NESN"],["Roche","SIX:ROG"],["Novartis","SIX:NOVN"],["UBS","SIX:UBSG"],["ASML","EURONEXT:ASML"],["LVMH","EURONEXT:MC"],["Toyota","TSE:7203"]];
-/* offline search list. UNIVERSE is generated from scripts/universe.py (equity, ETF and index rows with a TradingView symbol). */
+/* bootstrap search list from scripts/universe.py; full catalog is data/symbols.json (see scripts/build_symbols.py). */
 const UNIVERSE=[
 ["Cloudberry Clean Energy","OSL:CLOUD","Stock"],
 ["Scatec","OSL:SCATC","Stock"],
@@ -94,9 +94,19 @@ const UNIVERSE=[
 const EXTRA=[["JPMorgan Chase","NYSE:JPM","Stock"],["Visa","NYSE:V","Stock"],["Eli Lilly","NYSE:LLY","Stock"],["Broadcom","NASDAQ:AVGO","Stock"],["Netflix","NASDAQ:NFLX","Stock"],["AMD","NASDAQ:AMD","Stock"],["Palantir","NASDAQ:PLTR","Stock"],["SAP","XETR:SAP","Stock"],["Siemens","XETR:SIE","Stock"],["Richemont","SIX:CFR","Stock"],["ABB","SIX:ABBN","Stock"],["Zurich Insurance","SIX:ZURN","Stock"],["Novo Nordisk","OMXCOP:NOVO_B","Stock"],
 ["SPDR S&P 500 ETF","AMEX:SPY","ETF"],["Invesco QQQ","NASDAQ:QQQ","ETF"],["iShares Russell 2000","AMEX:IWM","ETF"],["SPDR Gold Shares","AMEX:GLD","ETF"],["iShares Silver Trust","AMEX:SLV","ETF"],["iShares MSCI Emerging Markets","AMEX:EEM","ETF"],["Vanguard FTSE Europe","AMEX:VGK","ETF"],["US Oil Fund","AMEX:USO","ETF"],["Uranium ETF (URA)","AMEX:URA","ETF"]];
 const KIND_BY_PANEL={markets:"Index",commodities:"Commodity",fx:"FX",rates:"ETF"};
+/* bootstrap index (HOT + universe + extras). Expanded catalog loads from data/symbols.json. */
 const LOCAL=(()=>{const m=new Map();const add=(n,s,k)=>{if(!m.has(s))m.set(s,{name:n,symbol:s,exchange:s.split(":")[0],kind:k});};
  PANELS[0].options.forEach(([n,s])=>add(n,s,"Index"));HOT.forEach(([n,s])=>add(n,s,"Stock"));UNIVERSE.forEach(([n,s,k])=>add(n,s,k));EXTRA.forEach(([n,s,k])=>add(n,s,k));
  PANELS.slice(1).forEach(p=>p.options.forEach(([n,s])=>add(n,s,KIND_BY_PANEL[p.id])));return[...m.values()];})();
+let INDEX=LOCAL.slice();
+let INDEX_META={count:LOCAL.length,ready:false};
+function mergeSymbols(rows){const m=new Map(INDEX.map(x=>[x.symbol,x]));
+ for(const row of rows||[]){const n=row[0],s=row[1],k=row[2]||"Stock";if(!s||!s.includes(":")||m.has(s))continue;
+  m.set(s,{name:n,symbol:s,exchange:s.split(":")[0],kind:k});}
+ INDEX=[...m.values()];INDEX_META={count:INDEX.length,ready:true};}
+async function loadSymbolIndex(){try{const r=await fetch("data/symbols.json",{cache:"no-cache"});if(!r.ok)throw Error("symbols "+r.status);
+  const d=await r.json();mergeSymbols(d.symbols||[]);INDEX_META.source=d.source;INDEX_META.generated=d.generated_utc;
+  const st=$("appStatus");if(st)st.textContent="Symbol index "+INDEX_META.count+" names";}catch(e){/* keep bootstrap LOCAL */}}
 const KEY="markets-monitor:v6",MAX_RECENT=8;
 const $=id=>document.getElementById(id);
 function defState(){return{page:"table",tableLanding:true,tableChart:{name:"",symbol:""},interval:"D",studies:"ma",layout:"grid",theme:"dark",phoneIndex:0,selections:Object.fromEntries(PANELS.map(p=>[p.id,p.options[0][1]])),custom:Object.fromEntries(PANELS.map(p=>[p.id,[]]))};}
@@ -110,7 +120,7 @@ let state=load();let tvP=null;const dash=$("dashboard");
 const runtime=Object.fromEntries(PANELS.map(p=>[p.id,{vis:false,done:false}]));runtime.tablechart={vis:true,done:false};const CHART_IDS=()=>[...PANELS.map(p=>p.id),"tablechart"];
 function save(){try{localStorage.setItem(KEY,JSON.stringify(state));}catch(e){}}
 function opts(id){return PANELS.find(p=>p.id===id).options.concat(state.custom[id]||[]);}
-function nameOf(id){const s=state.selections[id];const m=opts(id).find(o=>o[1]===s)||(LOCAL.find(x=>x.symbol===s)||{}).name;return Array.isArray(m)?m[0]:(m||s);}
+function nameOf(id){const s=state.selections[id];const m=opts(id).find(o=>o[1]===s)||(INDEX.find(x=>x.symbol===s)||LOCAL.find(x=>x.symbol===s)||{}).name;return Array.isArray(m)?m[0]:(m||s);}
 function studies(){const a=[];if(state.studies.includes("ma"))a.push({id:"MASimple@tv-basicstudies",inputs:{length:50}},{id:"MASimple@tv-basicstudies",inputs:{length:100}},{id:"MASimple@tv-basicstudies",inputs:{length:200}});if(state.studies.includes("vol"))a.push({id:"Volume@tv-basicstudies"});if(state.studies.includes("rsi"))a.push({id:"RSI@tv-basicstudies",inputs:{length:14}});return a;}
 function loadTV(){if(window.TradingView)return Promise.resolve(window.TradingView);if(tvP)return tvP;tvP=new Promise((res,rej)=>{const s=document.createElement("script");s.src="https://s3.tradingview.com/tv.js";s.async=true;s.onload=()=>window.TradingView?res(window.TradingView):rej(Error("TradingView did not initialise"));s.onerror=()=>{tvP=null;rej(Error("TradingView script blocked or offline"));};document.head.append(s);});return tvP;}
 function status(id,mode,msg){const el=$("status_"+id);if(!el)return;if(mode==="ready"){el.hidden=true;el.replaceChildren();return;}el.hidden=false;el.textContent=msg||"";}
@@ -142,21 +152,28 @@ function choose(id,item){const s=item.symbol.trim().toUpperCase();if(!s)return;
  state.selections[id]=s;save();fillSelect(id);syncHead(id);render(id,true);}
 function chips(){const box=$("chips_markets");if(!box)return;box.replaceChildren();HOT.forEach(([name,symbol])=>{const b=document.createElement("button");b.type="button";b.className="chip"+(symbol===state.selections.markets?" is-on":"");b.dataset.symbol=symbol;b.textContent=name;b.title=symbol;b.onclick=()=>choose("markets",{name,symbol});box.append(b);});}
 
-/* ---------- type-ahead search (local list first, TradingView lookup when reachable) ---------- */
+/* ---------- type-ahead search (static symbol index; TradingView remote lookup when reachable) ---------- */
 const fold=s=>String(s).toLowerCase().replace(/ø/g,"o").replace(/æ/g,"ae").normalize("NFD").replace(/[\u0300-\u036f]/g,"");
-function localQ(q){const n=fold(q.trim());if(!n)return HOT.slice(0,10).map(([name,symbol])=>LOCAL.find(x=>x.symbol===symbol));
- const sc=x=>{const nm=fold(x.name),sy=fold(x.symbol),tk=sy.split(":")[1]||sy;if(tk===n||sy===n)return 0;if(tk.startsWith(n))return 1;if(nm.startsWith(n))return 2;if(nm.split(/[\s(/.-]+/).some(w=>w.startsWith(n)))return 3;if(nm.includes(n)||sy.includes(n))return 4;return 9;};
- return LOCAL.map(x=>[sc(x),x]).filter(a=>a[0]<9).sort((a,b)=>a[0]-b[0]).slice(0,10).map(a=>a[1]);}
+function localQ(q){const n=fold(q.trim());const pool=INDEX;if(!n)return HOT.slice(0,10).map(([name,symbol])=>pool.find(x=>x.symbol===symbol)||LOCAL.find(x=>x.symbol===symbol));
+ const words=n.split(/\s+/).filter(Boolean);
+ const sc=x=>{const nm=fold(x.name),sy=fold(x.symbol),tk=sy.split(":")[1]||sy,ex=fold(x.exchange||sy.split(":")[0]||"");
+  if(tk===n||sy===n)return 0;if(tk.startsWith(n))return 1;if(nm===n)return 1;if(nm.startsWith(n))return 2;
+  if(words.length>1&&words.every(w=>nm.includes(w)))return 2;
+  if(nm.split(/[\s(/._-]+/).some(w=>w.startsWith(n)))return 3;if(tk.includes(n))return 4;
+  if(nm.includes(n)||sy.includes(n))return 5;if(ex===n)return 6;return 9;};
+ return pool.map(x=>[sc(x),x]).filter(a=>a[0]<9).sort((a,b)=>a[0]-b[0]||a[1].name.localeCompare(b[1].name)).slice(0,12).map(a=>a[1]);}
 async function remoteQ(q){const u="https://symbol-search.tradingview.com/symbol_search/v3/?text="+encodeURIComponent(q)+"&hl=0&lang=en&domain=production";const r=await fetch(u);if(!r.ok)throw Error("lookup "+r.status);const d=await r.json();const rows=Array.isArray(d)?d:(d.symbols||[]);
  return rows.slice(0,12).map(row=>{const t=(row.symbol||"").replace(/<\/?em>/g,"");const ex=row.prefix||row.exchange||"";return{name:(row.description||t).replace(/<\/?em>/g,""),symbol:ex&&t?ex+":"+t:t,exchange:ex,kind:row.type||""};}).filter(x=>x.symbol.includes(":"));}
 function wireSearch(id){const inp=$("search_"+id),box=$("suggest_"+id);if(!inp)return;let items=[],act=-1,timer,seq=0;
  const draw=()=>{box.replaceChildren();if(!items.length){box.hidden=true;inp.setAttribute("aria-expanded","false");return;}
-  items.forEach((it,i)=>{const b=document.createElement("button");b.type="button";b.setAttribute("role","option");b.className=i===act?"is-active":"";b.innerHTML='<span class="sym"></span><span class="ex"></span><span class="desc"></span>';b.querySelector(".sym").textContent=it.symbol;b.querySelector(".ex").textContent=[it.kind,it.exchange].filter(Boolean).join(" · ");b.querySelector(".desc").textContent=it.name;b.onmousedown=e=>{e.preventDefault();pick(it);};box.append(b);});
+  items.forEach((it,i)=>{const b=document.createElement("button");b.type="button";b.setAttribute("role","option");b.className=i===act?"is-active":"";b.innerHTML='<span class="sym"></span><span class="ex"></span><span class="desc"></span>';
+   const tk=(it.symbol||"").split(":")[1]||it.symbol;b.querySelector(".sym").textContent=tk;b.querySelector(".ex").textContent=[it.exchange||(it.symbol||"").split(":")[0],it.kind].filter(Boolean).join(" · ");b.querySelector(".desc").textContent=it.name+(it.symbol?" · "+it.symbol:"");
+   b.title=it.symbol;b.onmousedown=e=>{e.preventDefault();pick(it);};box.append(b);});
   box.hidden=false;inp.setAttribute("aria-expanded","true");};
  const pick=it=>{items=[];act=-1;draw();inp.value="";inp.blur();choose(id,it);};
  const run=async q=>{const my=++seq;items=localQ(q).filter(Boolean);act=-1;draw();const t=q.trim();if(t.length<2)return;
-  try{const rem=await remoteQ(t);if(my!==seq||!rem.length)return;const have=new Set(items.map(x=>x.symbol));items=items.slice(0,5).concat(rem.filter(x=>!have.has(x.symbol))).slice(0,12);draw();}catch(e){/* offline or blocked: local results stay */}};
- inp.addEventListener("input",()=>{clearTimeout(timer);timer=setTimeout(()=>run(inp.value),140);});
+  try{const rem=await remoteQ(t);if(my!==seq||!rem.length)return;const have=new Set(items.map(x=>x.symbol));items=items.slice(0,6).concat(rem.filter(x=>!have.has(x.symbol))).slice(0,12);draw();}catch(e){/* offline or blocked (common on static hosts): index results stay */}};
+ inp.addEventListener("input",()=>{clearTimeout(timer);timer=setTimeout(()=>run(inp.value),120);});
  inp.addEventListener("focus",()=>run(inp.value));
  inp.addEventListener("blur",()=>setTimeout(()=>{box.hidden=true;inp.setAttribute("aria-expanded","false");},160));
  inp.addEventListener("keydown",e=>{if(e.key==="ArrowDown"||e.key==="ArrowUp"){if(!items.length)return;e.preventDefault();act=(act+(e.key==="ArrowDown"?1:-1)+items.length)%items.length;draw();box.children[act]&&box.children[act].scrollIntoView({block:"nearest"});}
@@ -185,4 +202,4 @@ $("nextPanelButton").onclick=()=>{state.phoneIndex++;save();phone();};
 $("pageTable").onclick=()=>setPage("table");$("pageMonitor").onclick=()=>setPage("monitor");
 window.addEventListener("resize",phone);
 window.MM={openChart(name,symbol){state.tableChart={name,symbol};save();render("tablechart",true);},clearChart(){state.tableChart={name:"",symbol:""};save();const b=$("chart_tablechart");b&&b.replaceChildren();status("tablechart","ready");}};
-build();apply();clocks();lazy();
+build();apply();clocks();lazy();loadSymbolIndex();
