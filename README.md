@@ -19,7 +19,12 @@ Immediate share link (no Pages wait): https://raw.githack.com/MasterKano/markets
   curves per zone with the Nordic system price and Germany overlaid, a zone × tenor table (price, day/week/since-1-Sep
   changes, implied EPAD vs system, vs DE), zone premia and benchmark history; power drivers (TTF, EUA, API2 coal,
   GoO wind); Norwegian reservoir filling vs the NVE 2006–2025 min/median/max band plus a Swedish snapshot; news.
-- **Monitor** / **Equities**: TradingView widget charts (unchanged).
+- **Monitor**: four TradingView widget charts styled like the Table cards: Markets, Commodities, FX and Rates / Bonds.
+  Markets has an instrument dropdown plus type-ahead search (built-in list of indices, popular stocks/ETFs and every
+  equity/ETF/index in `scripts/universe.py`, so it works offline; TradingView lookup is added when reachable), quick-pick
+  chips, and in-widget symbol change. Searched symbols are kept under "Recent" in the dropdown. Rates / Bonds uses
+  Treasury and credit ETFs because TradingView does not allow Treasury yields (TVC:US*) in embedded widgets; for the
+  same reason, yield rows on the Table open a Yahoo 1-year line chart (TradingView ↗ still links to the full chart).
 
 ## Data
 
