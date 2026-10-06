@@ -84,7 +84,10 @@ function drawChart(r){const box=$("coChart");if(!box)return;const tv=r&&r.tv;if(
  window.MM.embed("coTv",tv).then(()=>{const s=$("coTvStatus");setTimeout(()=>s&&s.remove(),1200);}).catch(()=>{if(cur===want&&chartMode==="tv"){box.innerHTML=lineChart(r)+'<p class="co-fine">Interactive chart unavailable (TradingView blocked or offline); showing the 1Y line from Yahoo closes.</p>';}});}
 
 function tile(l,v,sub,tip){return'<div class="co-tile"'+(tip?' title="'+esc(tip)+'"':"")+'><span class="co-tl">'+esc(l)+'</span><span class="co-tv-val">'+v+'</span>'+(sub?'<span class="co-ts">'+sub+'</span>':"")+'</div>';}
-function valuation(c){const v=c&&c.val;if(!v)return sec("coVal","Valuation",empty("No valuation data from Yahoo for this name."));
+function valuation(c,r){let v=c&&c.val;if(!v)return sec("coVal","Valuation",empty("No valuation data from Yahoo for this name."));
+ /* same build, same method: show the Table's market cap / EV so both views always agree */
+ if(r&&isNum(r.mcap)&&(r.mcap_ccy||r.ccy)===c.ccy){v=Object.assign({},v,{mcap:r.mcap,mcap_eur:isNum(r.mcap_eur)?r.mcap_eur:v.mcap_eur});
+  if(r.ev_src&&isNum(r.ev))Object.assign(v,{ev:r.ev,ev_eur:isNum(r.ev_eur)?r.ev_eur:v.ev_eur,ev_src:r.ev_src});}
  const mc=majorCcy(c.ccy);const eur=x=>isNum(x)&&mc!=="EUR"?"€"+big(x):"";
  const neg=(x,flag)=>isNum(x)?mult(x):flag?'<span class="co-muted">neg.</span>':DASH;
  const t=[tile("Market cap",isNum(v.mcap)?big(v.mcap)+' <small>'+esc(mc)+'</small>':DASH,eur(v.mcap_eur)),
@@ -166,7 +169,7 @@ function about(c){const p=c&&c.profile;if(!p||(!p.summary&&!p.website&&!p.countr
 
 function render(){const body=$("coBody");const r=tableRow(cur);const c=CO&&CO.companies?CO.companies[cur]:null;head(c,r);
  if(!CO){body.innerHTML='<div class="co-loading"><span class="co-spin"></span>Loading company data…</div>';return;}
- let h=chartSec(r)+valuation(c)+consensus(c,r)+financials(c)+dates(c)+news(c,r)+about(c);
+ let h=chartSec(r)+valuation(c,r)+consensus(c,r)+financials(c)+dates(c)+news(c,r)+about(c);
  const when=c&&c.fetched_at?dfs.format(new Date(c.fetched_at))+" Geneva":null;
  h+='<p class="co-note">Data: Yahoo Finance, may be incomplete for small caps.'+(when?' Fundamentals fetched '+esc(when)+'.':"")+(c&&c.stale?' Latest refresh failed; showing the previous values.':"")+(!c?' No fundamentals file entry for this symbol yet.':"")+' Not investment advice.</p>';
  body.innerHTML=h;

@@ -17,7 +17,7 @@ import argparse, datetime as dt, json, math, os, random, re, sys, time
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 from universe import GROUPS  # noqa: E402
-from build_data import SESSION, MAJOR, yahoo_crumb, build_fx_table, log  # noqa: E402
+from build_data import SESSION, MAJOR, yahoo_crumb, build_fx_table, log, balance_from_ts, calc_ev  # noqa: E402
 
 ROOT = os.path.dirname(HERE)
 UTC = dt.timezone.utc
@@ -238,24 +238,14 @@ def shape(sym, spec, qs, ts, ts_ccy, fx, now):
     t12 = ttm(ts, quarterly)
 
     # balance-sheet point-in-time (latest quarter, else latest annual), reporting currency
-    debt, d_debt = latest(ts, "TotalDebt")
-    cash, _ = latest(ts, "CashCashEquivalentsAndShortTermInvestments")
-    if cash is None:
-        cash, _ = latest(ts, "CashAndCashEquivalents")
-    nd = (debt - cash) if debt is not None and cash is not None else latest(ts, "NetDebt")[0]
-    mi, _ = latest(ts, "MinorityInterest")
+    bal = balance_from_ts(ts)               # shared with build_data.py so Table EV == panel EV
+    nd = bal["nd"]
     eq, _ = latest(ts, "StockholdersEquity")
 
     # EV in trading currency: market cap + net debt (+ minorities), converting the reporting-currency
     # balance sheet first. Yahoo's own enterpriseValue mixes currencies for cross-currency reporters.
     mcap_f = fx.conv(mcap, pmaj, fccy)
-    ev, ev_src = None, None
-    if mcap is not None and nd is not None:
-        adj = fx.conv(nd + (mi or 0), fccy, pmaj)
-        if adj is not None:
-            ev, ev_src = mcap + adj, "calc"
-    if ev is None and num(ks.get("enterpriseValue")) is not None and fccy == pmaj:
-        ev, ev_src = num(ks.get("enterpriseValue")), "yahoo"
+    ev, ev_src = calc_ev(mcap, pccy, bal, fccy, num(ks.get("enterpriseValue")), fx.t)
     ev_f = fx.conv(ev, pmaj, fccy)
 
     def ratio(a, b, lo=None):

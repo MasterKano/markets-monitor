@@ -97,6 +97,41 @@ def fetch_yf(sym, years=10):
     return df, meta
 
 
+def fill_last_close(df, meta):
+    """Yahoo quirk: the chart API often leaves the latest daily close blank (NaN) for Nordic/LSE tickers while
+    meta.regularMarketPrice already holds that session's price. Fill (or append) the bar for the quote's
+    regularMarketTime date so the latest close and 1D % are not a day behind. Returns (df, filled?)."""
+    px, ts = meta.get("regularMarketPrice"), meta.get("regularMarketTime")
+    try:
+        px = float(px)
+    except Exception:
+        return df, False
+    if not ts or not (px > 0) or math.isnan(px):
+        return df, False
+    tz = meta.get("exchangeTimezoneName") or "UTC"
+    t = pd.Timestamp(int(ts), unit="s", tz="UTC").tz_convert(tz)
+    d = t.date()
+    df = df.copy()
+    if len(df) and df.index.tz is None:
+        df.index = df.index.tz_localize(tz)
+    pos = [i for i, x in enumerate(df.index) if x.tz_convert(tz).date() == d]
+    if pos:
+        p = pos[-1]
+        c = df.iloc[p, df.columns.get_loc("close")]
+        if c is None or pd.isna(c):
+            df.iloc[p, df.columns.get_loc("close")] = px
+            v = df.iloc[p, df.columns.get_loc("volume")]
+            if (v is None or pd.isna(v)) and meta.get("regularMarketVolume"):
+                df.iloc[p, df.columns.get_loc("volume")] = float(meta["regularMarketVolume"])
+            return df, True
+        return df, False
+    if len(df) and df.index[-1].tz_convert(tz).date() > d:
+        return df, False
+    vol = meta.get("regularMarketVolume")
+    row = pd.DataFrame({"close": [px], "volume": [float(vol) if vol else float("nan")]}, index=pd.DatetimeIndex([t]))
+    return pd.concat([df, row]).sort_index(), True
+
+
 def fetch(sym):
     try:
         df, meta = fetch_chart(sym)
@@ -108,6 +143,9 @@ def fetch(sym):
             src = "yfinance"
         except Exception as e2:
             raise RuntimeError(f"{e1} | yfinance: {e2}")
+    df, filled = fill_last_close(df, meta or {})
+    if filled:
+        meta = dict(meta, _last_from_quote=True)
     return clean(df), meta, src
 
 
@@ -166,7 +204,7 @@ def fetch_fundamentals(sym, crumb, tries=4):
         host = ("query1", "query2")[i % 2]
         url = f"https://{host}.finance.yahoo.com/v10/finance/quoteSummary/{sym}"
         try:
-            params = dict(modules="price,defaultKeyStatistics,summaryDetail")
+            params = dict(modules="price,defaultKeyStatistics,summaryDetail,financialData")
             if crumb:
                 params["crumb"] = crumb
             r = SESSION.get(url, params=params, timeout=25)
@@ -186,7 +224,8 @@ def fetch_fundamentals(sym, crumb, tries=4):
             mcap = _raw(price, "marketCap") or _raw(sd, "marketCap")
             ev = _raw(ks, "enterpriseValue")
             ccy = price.get("currency") or sd.get("currency")
-            return mcap, ev, ccy
+            fccy = (res.get("financialData") or {}).get("financialCurrency")
+            return mcap, ev, ccy, fccy
         except LookupError as e:
             last_err = e
             break
@@ -194,6 +233,96 @@ def fetch_fundamentals(sym, crumb, tries=4):
             last_err = e
             time.sleep(min(20, 2 ** (i + 1)) + random.uniform(0, 0.8))
     raise RuntimeError(f"fundamentals failed: {last_err}")
+
+
+BAL_FIELDS = ("TotalDebt", "CashCashEquivalentsAndShortTermInvestments", "CashAndCashEquivalents", "NetDebt",
+              "MinorityInterest")
+
+
+def parse_timeseries(js):
+    """fundamentals-timeseries JSON -> ({type: {asOfDate: value}}, dominant currency)."""
+    out, ccys = {}, {}
+    for it in ((js or {}).get("timeseries") or {}).get("result") or []:
+        t = ((it.get("meta") or {}).get("type") or [None])[0]
+        pts = [x for x in (it.get(t) or []) if x and x.get("asOfDate") and _raw(x, "reportedValue") is not None]
+        if not t or not pts:
+            continue
+        out[t] = {x["asOfDate"]: _raw(x, "reportedValue") for x in pts}
+        for x in pts:
+            if x.get("currencyCode"):
+                ccys[x["currencyCode"]] = ccys.get(x["currencyCode"], 0) + 1
+    return out, (max(ccys, key=ccys.get) if ccys else None)
+
+
+def ts_latest(ts, field):
+    """Most recent reported point across quarterly and annual series -> (value, date)."""
+    best = (None, None)
+    for p in ("annual", "quarterly"):          # quarterly wins ties
+        s = ts.get(p + field) or {}
+        if s:
+            d = max(s)
+            if best[1] is None or d >= best[1]:
+                best = (s[d], d)
+    return best
+
+
+def balance_from_ts(ts):
+    """Latest net debt (total debt - cash & ST investments; Yahoo NetDebt fallback) and minority interest."""
+    debt, d = ts_latest(ts, "TotalDebt")
+    cash, _ = ts_latest(ts, "CashCashEquivalentsAndShortTermInvestments")
+    if cash is None:
+        cash, _ = ts_latest(ts, "CashAndCashEquivalents")
+    nd = (debt - cash) if debt is not None and cash is not None else ts_latest(ts, "NetDebt")[0]
+    mi, _ = ts_latest(ts, "MinorityInterest")
+    return dict(nd=nd, mi=mi, asof=d)
+
+
+def fetch_balance(sym, crumb, tries=3):
+    """Balance-sheet components for EV from Yahoo fundamentals-timeseries -> (dict, currency)."""
+    types = ",".join(p + f for p in ("annual", "quarterly") for f in BAL_FIELDS)
+    last_err = None
+    for i in range(tries):
+        host = ("query2", "query1")[i % 2]
+        try:
+            params = dict(type=types, period1=int(time.time()) - 3 * 365 * 86400, period2=int(time.time()) + 86400)
+            if crumb:
+                params["crumb"] = crumb
+            r = SESSION.get(f"https://{host}.finance.yahoo.com/ws/fundamentals-timeseries/v1/finance/timeseries/{sym}",
+                            params=params, timeout=25)
+            if r.status_code >= 400:
+                raise IOError(f"HTTP {r.status_code}")
+            ts, ccy = parse_timeseries(r.json())
+            return balance_from_ts(ts), ccy
+        except Exception as e:
+            last_err = e
+            time.sleep(min(10, 2 ** (i + 1)) + random.uniform(0, 0.5))
+    raise RuntimeError(f"balance failed: {last_err}")
+
+
+def fx_conv(v, src, dst, fx_table):
+    """Convert v between currencies (minor units mapped to major) via the EUR-cross table."""
+    if v is None or not src or not dst:
+        return None
+    src, dst = MAJOR.get(src, src), MAJOR.get(dst, dst)
+    if src == dst:
+        return v
+    a, b = (fx_table.get(src) or {}).get("rate"), (fx_table.get(dst) or {}).get("rate")
+    return v / a * b if a and b else None
+
+
+def calc_ev(mcap, pccy, bal, fccy, yahoo_ev, fx_table):
+    """EV in trading currency = market cap + net debt (+ minorities), the reporting-currency balance sheet converted
+    at the current FX cross. Yahoo's enterpriseValue mixes currencies for cross-currency reporters, so it is used
+    only when the components are missing and listing and reporting currency agree. -> (ev, source)."""
+    pmaj = MAJOR.get(pccy, pccy)
+    fccy = fccy or pmaj
+    if mcap is not None and bal and bal.get("nd") is not None:
+        adj = fx_conv(bal["nd"] + (bal.get("mi") or 0), fccy, pmaj, fx_table)
+        if adj is not None:
+            return mcap + adj, "calc"
+    if yahoo_ev is not None and MAJOR.get(fccy, fccy) == pmaj:
+        return yahoo_ev, "yahoo"
+    return None, None
 
 
 def fetch_fx_yahoo(ccy):
@@ -381,11 +510,17 @@ def analyse(spec, df, meta, src, now, fund=None, fx_table=None):
     kind = spec.get("kind", "equity")
     out["mcap"] = out["mcap_eur"] = out["ev"] = out["ev_eur"] = None
     out["mcap_ccy"] = None
+    if meta.get("_last_from_quote"):
+        out["last_from_quote"] = True     # latest close taken from the quote (chart bar was blank / missing)
     if fund and kind in ("equity", "etf"):
-        mcap, ev, fcy = fund
+        mcap, ev_y, fcy, fin_ccy, bal = (list(fund) + [None, None])[:5]
         ccy = fcy or out.get("ccy")
+        ev, ev_src = ev_y, ("yahoo" if ev_y is not None else None)
+        if kind == "equity" and fx_table:
+            ev, ev_src = calc_ev(mcap, ccy, bal, fin_ccy, ev_y, fx_table)
         out["mcap"] = sig(mcap, 6) if mcap is not None else None
         out["ev"] = sig(ev, 6) if ev is not None else None
+        out["ev_src"] = ev_src
         out["mcap_ccy"] = ccy
         if fx_table:
             out["mcap_eur"] = to_eur(mcap, ccy, fx_table)
@@ -435,8 +570,16 @@ def main():
     fund_syms = [s for s in syms if specs[s].get("kind", "equity") in fund_kinds and s in cache]
     for i, sym in enumerate(fund_syms):
         try:
-            funds[sym] = fetch_fundamentals(sym, crumb)
-            log(f"  fund [{i+1}/{len(fund_syms)}] {sym}: mcap={funds[sym][0]} ev={funds[sym][1]} {funds[sym][2]}")
+            mcap, ev, ccy, fccy = fetch_fundamentals(sym, crumb)
+            bal = None
+            if specs[sym].get("kind", "equity") == "equity":
+                try:
+                    bal, ts_ccy = fetch_balance(sym, crumb)
+                    fccy = ts_ccy or fccy
+                except Exception as e:
+                    log(f"  balance {sym}: {e}")
+            funds[sym] = (mcap, ev, ccy, fccy, bal)
+            log(f"  fund [{i+1}/{len(fund_syms)}] {sym}: mcap={mcap} ev_yahoo={ev} {ccy}/{fccy} nd={bal and bal.get('nd')}")
         except Exception as e:
             log(f"  fund [{i+1}/{len(fund_syms)}] {sym}: {e}")
         time.sleep(a.sleep * 0.5 + random.uniform(0, 0.15))
@@ -445,8 +588,9 @@ def main():
     needed = set()
     for sym, trip in funds.items():
         ccy = trip[2] or (cache[sym][1] or {}).get("currency")
-        if ccy:
-            needed.add(MAJOR.get(ccy, ccy))
+        for c in (ccy, trip[3]):
+            if c:
+                needed.add(MAJOR.get(c, c))
     for sym, (df, meta, src) in cache.items():
         ccy = meta.get("currency")
         if ccy:
@@ -489,7 +633,8 @@ def main():
             volume="Last session volume vs average of the N sessions before it.",
             ma="Simple moving average of daily closes incl. the latest bar; % = price / MA - 1.",
             futures="Continuous front-month futures: long-horizon returns (esp. 10Y) include roll effects.",
-            mcap_ev="Yahoo marketCap / enterpriseValue for equities and ETFs; converted to EUR via Yahoo EUR{CCY}=X (ECB SDW mid fallback). GBp treated as GBP.",
+            mcap_ev="Yahoo marketCap. Equity EV = market cap + net debt (latest total debt minus cash & short-term investments) + minority interest, reporting-currency balance sheet converted at current FX (same as the company panel); Yahoo enterpriseValue only when components are missing (and for ETFs). Converted to EUR via Yahoo EUR{CCY}=X (ECB SDW mid fallback). GBp treated as GBP.",
+            last_close="When Yahoo's chart API leaves the latest daily close blank (common for Nordic/LSE tickers), the quote's regularMarketPrice for that session is used (last_from_quote).",
             prices="Yahoo quotes are typically delayed ~15 minutes on non-US venues (not live).",
         ),
         fx_eur=fx_table,
