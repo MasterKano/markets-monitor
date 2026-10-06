@@ -1,13 +1,14 @@
 name: Intraday prices
 
 # Market prices only (no fundamentals, power or news), every 15 min on weekdays.
-# UTC 05:00-21:45 covers ~07:00-23:45 Geneva in summer (CEST) and ~06:00-22:45 in winter (CET).
+# UTC 05:07-21:52 covers ~07:00-23:50 Geneva in summer (CEST) and ~06:00-22:50 in winter (CET).
+# Off-quarter minutes: GitHub delays/drops many scheduled runs at :00/:15/:30/:45 under load.
 # Nothing is committed to main: the result is force-pushed as a single-commit orphan branch `live-data`
 # (no history growth). The page reads it from raw.githubusercontent.com and uses whichever of
 # live-data/market.json and data/market.json (full builds, 05:30 / 21:00 UTC) is newer.
 on:
   schedule:
-    - cron: "*/15 5-21 * * 1-5"
+    - cron: "7,22,37,52 5-21 * * 1-5"
   workflow_dispatch:
 
 permissions:

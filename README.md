@@ -44,7 +44,7 @@ news only), and on demand, and commits:
   yfinance fallback). Price returns, not total return. Futures are continuous front-month, so long horizons
   include roll effects. Universe: `scripts/universe.py`.
 - Intraday prices: `.github/workflows/intraday.yml` runs `build_data.py --intraday` every 15 min on weekdays
-  (05:00-21:45 UTC): latest Yahoo quote + time, 1D vs previous close, mkt cap / EV scaled from the last full build.
+  (:07/:22/:37/:52, 05-21 UTC): latest Yahoo quote + time, 1D vs previous close, mkt cap / EV scaled from the last full build.
   It is not committed: it force-pushes a single-commit orphan branch `live-data`, which the page reads from
   raw.githubusercontent.com (using whichever of that and `data/market.json` is newer).
 - `data/news.json` from `scripts/build_news.py`: Google News RSS searches plus exchange announcements
