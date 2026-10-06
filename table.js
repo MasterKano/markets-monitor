@@ -6,12 +6,20 @@ const PCT=["1D","1W","1M","6M","YTD","1Y","5Y","10Y"];
 const FLOOR={"1D":1,"1W":2,"1M":4,"6M":8,"YTD":10,"1Y":12,"5Y":25,"10Y":40};
 const FLOOR_BP={"1D":6,"1W":15,"1M":25,"6M":50,"YTD":60,"1Y":75,"5Y":150,"10Y":200};
 const NARROW=matchMedia("(max-width:900px)");
-const st=Object.assign({tab:"nordic",mode:"price",explain:null,sort:null,dir:-1,q:""},(()=>{try{return JSON.parse(localStorage.getItem(LS)||"{}");}catch(e){return{};}})());
+/* Navigation: Equities (chips) · Macro (indices, commodities, rates & FX on one page) · Power · Charts (app.js Monitor page).
+   URL hash #equities/<chip>, #macro[/<section>], #power[/<section>], #charts; older hashes (#nordic, #rates, #monitor…) redirect. */
+const EQ=[["nordic","Renewables","renewables"],["energy","Oil & Gas","oil-gas"],["metals","Metals & Mining","metals"],["lundin","Lundin Group","lundin"]];
+const MAC=[["indices","Indices"],["commodities","Commodities"],["rates","Rates & FX"]];
+const VIEWS=["equities","macro","power","charts"];
+const LEGACY={nordic:"equities/renewables",energy:"equities/oil-gas",metals:"equities/metals",lundin:"equities/lundin",indices:"macro/indices",commodities:"macro/commodities",rates:"macro/rates",monitor:"charts",table:"equities",markets:"equities",power:"power"};
+const st=Object.assign({view:"equities",eq:"nordic",mode:"price",explain:null,sort:null,dir:-1,q:""},(()=>{try{return JSON.parse(localStorage.getItem(LS)||"{}");}catch(e){return{};}})());
 if(st.mode!=="volma")st.mode="price";
-const save=()=>{try{localStorage.setItem(LS,JSON.stringify({tab:st.tab,mode:st.mode,explain:st.explain,sort:st.sort,dir:st.dir}));}catch(e){}};
+if(st.tab){/* v2 state: single tab id */if(st.tab==="power")st.view="power";else if(EQ.some(e=>e[0]===st.tab)){st.view="equities";st.eq=st.tab;}else if(MAC.some(m=>m[0]===st.tab))st.view="macro";delete st.tab;}
+if(!["equities","macro","power"].includes(st.view))st.view="equities";if(!EQ.some(e=>e[0]===st.eq))st.eq="nordic";
+const save=()=>{try{localStorage.setItem(LS,JSON.stringify({view:st.view,eq:st.eq,mode:st.mode,explain:st.explain,sort:st.sort,dir:st.dir}));}catch(e){}};
+const isPower=()=>st.view==="power",isMacro=()=>st.view==="macro";
 const showPrice=()=>st.mode==="price",showVolMa=()=>st.mode==="volma";
 let DATA=null,NEWS=null;
-const POWER="power";  // Nordic Power tab (power.js), not a market.json group
 const $=id=>document.getElementById(id);
 const esc=s=>String(s==null?"":s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const NA='<span class="na">n/a</span>';
@@ -29,7 +37,7 @@ function fvol(v){if(!isNum(v))return NA;const a=Math.abs(v);if(a>=1e9)return(v/1
 const SEC_FIX={"Potential acquirers":{label:"Strategic peers",note:"Speculative, illustrative screen of listed strategic and financial investors active in European renewables. Not based on any reported approach; not investment advice. Hover a name for the rationale."}};
 const secLab=sec=>{const f=SEC_FIX[sec.label];return f?{label:f.label,note:f.note}:{label:sec.label,note:sec.note};};
 const isCo=r=>r.kind==="equity"&&!!window.MMCompany;
-const rows=()=>{const g=DATA&&DATA.groups.find(x=>x.id===st.tab);return g?g.sections.flatMap(s=>s.rows):[];};
+const grp=id=>DATA&&DATA.groups.find(x=>x.id===id)||null;
 function feur(v){if(!isNum(v))return NA;const a=Math.abs(v);if(a>=1e12)return(v/1e12).toFixed(2)+"T";if(a>=1e9)return(v/1e9).toFixed(a>=1e11?1:2)+"B";if(a>=1e6)return(v/1e6).toFixed(a>=1e8?0:a>=1e7?1:2)+"M";if(a>=1e3)return(v/1e3).toFixed(0)+"K";return String(Math.round(v));}
 function fundTip(r,kind){const raw=kind==="ev"?r.ev:r.mcap;const eur=kind==="ev"?r.ev_eur:r.mcap_eur;const ccy=r.mcap_ccy||r.ccy||"";
  const bits=[];if(isNum(eur))bits.push("€"+feur(eur).replace(/<[^>]+>/g,""));if(isNum(raw)&&ccy)bits.push(feur(raw).replace(/<[^>]+>/g,"")+" "+ccy);if(DATA&&DATA.fx_asof)bits.push("FX as of "+DATA.fx_asof);return bits.join(" · ");}
@@ -91,10 +99,8 @@ function cell(c,r,S){const k=c.k,hid=c.hide?" c-opt":"";
 
 /* ---------- render ---------- */
 function sortRows(rs){if(!st.sort||!val[st.sort])return rs;const f=val[st.sort];return rs.slice().sort((a,b)=>{const x=f(a),y=f(b);const nx=x==null||(typeof x==="number"&&!isFinite(x)),ny=y==null||(typeof y==="number"&&!isFinite(y));if(nx&&ny)return 0;if(nx)return 1;if(ny)return-1;if(typeof x==="string")return st.dir*x.localeCompare(y);return -st.dir*(y-x);});}
-function renderTabs(){const box=$("tblTabs");box.replaceChildren();if(!DATA)return;DATA.groups.forEach(g=>{const rs=g.sections.flatMap(s=>s.rows).filter(r=>!r.error);const up=rs.filter(r=>r.pct&&r.pct["1D"]>0).length,dn=rs.filter(r=>r.pct&&r.pct["1D"]<0).length;const b=document.createElement("button");b.type="button";b.className="tbl-tab"+(g.id===st.tab?" is-on":"");b.setAttribute("role","tab");b.setAttribute("aria-selected",g.id===st.tab);
- b.innerHTML='<span>'+esc(g.label)+'</span><span class="breadth" title="'+up+' up / '+dn+' down today"><i style="width:'+(rs.length?Math.round(up/rs.length*100):0)+'%"></i></span>';b.onclick=()=>{st.tab=g.id;st.q="";$("tblFilter").value="";save();renderAll();};box.append(b);if(g.id==="nordic")box.append(powerTab());});}
-function powerTab(){const b=document.createElement("button");b.type="button";b.className="tbl-tab tab-power"+(st.tab===POWER?" is-on":"");b.setAttribute("role","tab");b.setAttribute("aria-selected",st.tab===POWER);
- b.innerHTML='<span>Nordic Power</span><span class="breadth pw-tabbar" title="Day-ahead prices, forwards, hydro"><i></i></span>';b.onclick=()=>{st.tab=POWER;save();renderAll();};return b;}
+function renderTabs(){const box=$("tblTabs");box.replaceChildren();if(!DATA)return;EQ.forEach(([id,label])=>{const g=grp(id);if(!g)return;const rs=g.sections.flatMap(s=>s.rows).filter(r=>!r.error);const up=rs.filter(r=>r.pct&&r.pct["1D"]>0).length,dn=rs.filter(r=>r.pct&&r.pct["1D"]<0).length;const on=id===st.eq;const b=document.createElement("button");b.type="button";b.className="tbl-tab"+(on?" is-on":"");b.setAttribute("role","tab");b.setAttribute("aria-selected",on);
+ b.innerHTML='<span>'+esc(label)+'</span><span class="breadth" title="'+up+' up / '+dn+' down today"><i style="width:'+(rs.length?Math.round(up/rs.length*100):0)+'%"></i></span>';b.onclick=()=>{if(st.eq===id)return;st.eq=id;st.q="";$("tblFilter").value="";save();renderAll();writeHash();};box.append(b);});}
 function renderMovers(rs){const box=$("tblMovers");const ok=rs.filter(r=>!r.error&&r.kind!=="yield"&&r.pct&&isNum(r.pct["1D"]));const uniq=[...new Map(ok.map(r=>[r.sym,r])).values()];
  if(!uniq.length){box.replaceChildren();return;}const s=uniq.slice().sort((a,b)=>b.pct["1D"]-a.pct["1D"]);const best=s[0],worst=s[s.length-1];
  const spikes=[...new Map(rs.filter(r=>r.vol&&r.vol.r20>1.5).map(r=>[r.sym,r])).values()].sort((a,b)=>b.vol.r20-a.vol.r20).slice(0,3);
@@ -105,36 +111,41 @@ function renderMovers(rs){const box=$("tblMovers");const ok=rs.filter(r=>!r.erro
  if(above!=null)h+='<span class="mover static"><span class="ml">Above 200d</span><b>'+above+'%</b> of names</span>';
  box.innerHTML=h;box.querySelectorAll("button[data-sym]").forEach(b=>b.onclick=()=>{const r=rs.find(x=>x.sym===b.dataset.sym);r&&openChart(r);});}
 const gsMark=(h,c)=>c.gs?h.replace('class="','class="gs '):h;
-function renderTable(){const tbl=$("tbl");const g=DATA.groups.find(x=>x.id===st.tab)||DATA.groups[0];st.tab=g.id;const all=g.sections.flatMap(s=>s.rows);const S=scales(all);
- const q=st.q.trim().toLowerCase();
- const V=COLS.filter(c=>{
-  if(c.g==="price")return showPrice();
-  if(c.g==="vol"||c.g==="ma")return showVolMa();
-  return true;
- });
- V.forEach(c=>c.gs=false);GROUPS.forEach(([id])=>{if(!id)return;const f=V.find(c=>c.g===id);if(f)f.gs=true;});
+function visCols(){const V=COLS.filter(c=>{if(c.g==="price")return showPrice();if(c.g==="vol"||c.g==="ma")return showVolMa();if(isMacro()&&(c.k==="mcap"||c.k==="ev"))return false;return true;});
+ V.forEach(c=>c.gs=false);GROUPS.forEach(([id])=>{if(!id)return;const f=V.find(c=>c.g===id);if(f)f.gs=true;});return V;}
+function tableHtml(g,V,S,q){
  let head='<thead><tr class="grp">';GROUPS.forEach(([id,l])=>{const n=V.filter(c=>c.g===id).length;if(!n)return;head+='<th scope="colgroup" class="g-'+(id||"name")+(id?" gs":"")+'" colspan="'+n+'"><span class="gl">'+esc(l)+'</span></th>';});
  head+='</tr><tr class="cols">';V.forEach(c=>{const on=st.sort===c.k;head+=gsMark('<th scope="col" class="'+(c.cls||"num")+(c.g?" g-"+c.g:"")+(on?" sorted":"")+'" data-k="'+c.k+'"'+(c.t?' title="'+esc(c.t)+'"':"")+' aria-sort="'+(on?(st.dir>0?"ascending":"descending"):"none")+'"><button type="button">'+esc(c.l)+'<span class="arrow">'+(on?(st.dir>0?"▲":"▼"):"")+'</span></button></th>',c);});
- head+='</tr></thead>';let body="";
- g.sections.forEach(sec=>{let rs=sec.rows;if(q)rs=rs.filter(r=>(r.name+" "+r.sym+" "+(r.ccy||"")).toLowerCase().includes(q));if(!rs.length)return;const sl=secLab(sec);
+ head+='</tr></thead>';let body="",n=0;
+ g.sections.forEach(sec=>{let rs=sec.rows;if(q)rs=rs.filter(r=>(r.name+" "+r.sym+" "+(r.ccy||"")).toLowerCase().includes(q));if(!rs.length)return;n+=rs.length;const sl=secLab(sec);
   if(sl.label)body+='<tbody class="sec"><tr class="sec-row"><th scope="rowgroup" class="c-name sec-name" title="'+esc(sl.note||"")+'">'+esc(sl.label)+'</th><td colspan="'+(V.length-1)+'" class="sec-note"><span class="sec-note-txt">'+esc(sl.note||"")+'</span></td></tr></tbody>';
   body+='<tbody class="rows">'+sortRows(rs).map(r=>'<tr data-sym="'+esc(r.sym)+'" tabindex="0"'+(r.error?' class="err"':"")+'>'+V.map(c=>gsMark(cell(c,r,S),c)).join("")+"</tr>").join("")+"</tbody>";});
- tbl.innerHTML=head+(body||'<tbody><tr><td class="empty" colspan="'+V.length+'">No matches</td></tr></tbody>');
- tbl.classList.remove("is-compact");
+ return{html:head+(body||'<tbody><tr><td class="empty" colspan="'+V.length+'">No matches</td></tr></tbody>'),n};}
+function bindTable(tbl,all){
  tbl.querySelectorAll("thead th[data-k]").forEach(th=>th.querySelector("button").onclick=()=>{const k=th.dataset.k;const asc=k==="name";if(st.sort!==k){st.sort=k;st.dir=asc?1:-1;}else if((st.dir===-1&&!asc)||(st.dir===1&&asc))st.dir*=-1;else{st.sort=null;}save();renderTable();});
  const open=tr=>{const r=all.find(x=>x.sym===tr.dataset.sym);r&&openChart(r);};
  const pick=(tr,e)=>{const r=all.find(x=>x.sym===tr.dataset.sym);if(!r)return;if(e&&e.target.closest&&e.target.closest("th.has-co")&&isCo(r)){window.MMCompany.open(r.sym);return;}openChart(r);};
- tbl.querySelectorAll("tbody tr[data-sym]").forEach(tr=>{tr.onclick=e=>pick(tr,e);tr.onkeydown=e=>{if(e.key==="Enter"&&e.target===tr)open(tr);};});
- renderMovers(all);
- const futs=all.some(r=>r.roll);const fxN=DATA.fx_asof?(" Cap/EV in EUR (FX as of "+DATA.fx_asof+")."):" ";
- $("tblFoot").innerHTML='Prices delayed ~15 min (Yahoo). Price returns from daily closes (not total return).'+fxN+(futs?' † Continuous front-month futures: long-horizon (esp. 10Y) figures include roll effects.':"")+(st.tab==="rates"?" Yield rows show changes and MA distance in basis points.":"")+' n/a = not available from source or not enough history. Click a company name for its profile (valuation, consensus, financials); click elsewhere in the row for its chart.';}
+ tbl.querySelectorAll("tbody tr[data-sym]").forEach(tr=>{tr.onclick=e=>pick(tr,e);tr.onkeydown=e=>{if(e.key==="Enter"&&e.target===tr)open(tr);};});}
+function footNote(all,rates){const futs=all.some(r=>r.roll);const fxN=DATA.fx_asof&&!isMacro()?(" Cap/EV in EUR (FX as of "+DATA.fx_asof+")."):" ";
+ $("tblFoot").innerHTML='Prices delayed ~15 min (Yahoo). Price returns from daily closes (not total return).'+fxN+(futs?' † Continuous front-month futures: long-horizon (esp. 10Y) figures include roll effects.':"")+(rates?" Yield rows show changes and MA distance in basis points.":"")+' n/a = not available from source or not enough history. '+(isMacro()?'Click a row for its chart.':'Click a company name for its profile (valuation, consensus, financials); click elsewhere in the row for its chart.');}
+function renderTable(){if(isMacro())return renderMacro();const tbl=$("tbl");const g=grp(st.eq)||grp(EQ[0][0])||DATA.groups[0];st.eq=g.id;const all=g.sections.flatMap(s=>s.rows);const S=scales(all);
+ const V=visCols();tbl.innerHTML=tableHtml(g,V,S,st.q.trim().toLowerCase()).html;tbl.classList.remove("is-compact");bindTable(tbl,all);
+ renderMovers(all);footNote(all,false);}
+function renderMacro(){const box=$("macroWrap");const V=visCols(),q=st.q.trim().toLowerCase();let allRows=[];
+ if(!box.dataset.ready){box.dataset.ready="1";box.innerHTML=MAC.map(([id,l])=>'<section class="macro-sec" id="macro-'+id+'" aria-labelledby="macroH-'+id+'"><div class="macro-head"><h2 class="macro-h" id="macroH-'+id+'">'+esc(l)+'</h2><span class="macro-meta" id="macroM-'+id+'"></span></div><div class="tbl-wrap macro-wrap"><table class="mtable" id="macroT-'+id+'"></table></div></section>').join("");}
+ MAC.forEach(([id])=>{const g=grp(id),sec=$("macro-"+id);if(!g){sec.hidden=true;return;}const all=g.sections.flatMap(s=>s.rows);allRows=allRows.concat(all);const r=tableHtml(g,V,scales(all),q);sec.hidden=!!q&&!r.n;
+  const tbl=$("macroT-"+id);tbl.innerHTML=r.html;bindTable(tbl,all);const ok=all.filter(x=>!x.error),up=ok.filter(x=>x.pct&&x.pct["1D"]>0).length;
+  $("macroM-"+id).innerHTML='<span class="breadth" title="'+up+' up / '+(ok.filter(x=>x.pct&&x.pct["1D"]<0).length)+' down today"><i style="width:'+(ok.length?Math.round(up/ok.length*100):0)+'%"></i></span>'+all.length+' instruments';});
+ renderMovers(allRows);footNote(allRows,true);}
 function renderStamp(){const el=$("tblStamp");if(!DATA){el.textContent="";return;}const d=new Date(DATA.generated_utc);el.innerHTML='<span class="stamp-dot"></span>Data updated <b>'+esc(gf.format(d))+'</b> Geneva · '+esc(ago(DATA.generated_utc))+(DATA.errors&&DATA.errors.length?' · <span title="'+esc(DATA.errors.map(e=>e.sym+": "+e.error).join("\n"))+'">'+DATA.errors.length+' missing</span>':"");$("footStamp").textContent="Table data updated "+gf.format(d)+" Geneva.";$("exAsOf").textContent=gf.format(d)+" Geneva";const fxEl=$("exFxAsOf");if(fxEl)fxEl.textContent=DATA.fx_asof||"n/a";}
-function renderNews(){const box=$("newsList"),hd=$("newsTitle"),meta=$("newsMeta");const g=DATA&&DATA.groups.find(x=>x.id===st.tab);hd.textContent="News · "+(st.tab===POWER?"Nordic Power":g?g.label:"");
+function newsItems(){const T=(NEWS&&NEWS.tabs)||{};if(isPower())return T.power||[];if(!isMacro())return T[st.eq]||[];
+ const seen=new Set();return MAC.flatMap(([id])=>T[id]||[]).filter(it=>{const k=it.url||it.title;if(seen.has(k))return false;seen.add(k);return true;}).sort((a,b)=>new Date(b.time)-new Date(a.time)).slice(0,24);}
+function renderNews(){const box=$("newsList"),hd=$("newsTitle"),meta=$("newsMeta");hd.textContent="News · "+(isPower()?"Nordic Power":isMacro()?"Macro":(EQ.find(e=>e[0]===st.eq)||[,""])[1]);
  if(!NEWS){box.innerHTML='<li class="news-empty">News not available yet.</li>';meta.textContent="";return;}
- const items=(NEWS.tabs&&NEWS.tabs[st.tab])||[];meta.textContent="Updated "+gf.format(new Date(NEWS.generated_utc))+" Geneva";
+ const items=newsItems();meta.textContent="Updated "+gf.format(new Date(NEWS.generated_utc))+" Geneva";
  if(!items.length){box.innerHTML='<li class="news-empty">No recent headlines.</li>';return;}
  box.innerHTML=items.map(it=>{const u=/^https?:\/\//i.test(it.url)?it.url:"#";return'<li class="news-item'+(it.kind==="exchange"?" ex":"")+'"><time datetime="'+esc(it.time)+'">'+esc(gfs.format(new Date(it.time)))+'</time><a href="'+esc(u)+'" target="_blank" rel="noopener noreferrer">'+esc(it.title)+'</a><span class="src">'+(it.kind==="exchange"?'<span class="badge">Exchange</span>':"")+esc(it.source)+'</span></li>';}).join("");}
-function renderAll(){const pw=st.tab===POWER;document.body.classList.toggle("is-power",pw);renderTabs();renderStamp();if(pw){window.MMPower&&window.MMPower.show();}else{window.MMPower&&window.MMPower.hide();if(DATA)renderTable();}renderNews();
+function renderAll(){const pw=isPower();document.body.classList.toggle("is-power",pw);["equities","macro","power"].forEach(v=>document.body.classList.toggle("view-"+v,st.view===v));renderTabs();syncNav();renderStamp();if(pw){window.MMPower&&window.MMPower.show();}else{window.MMPower&&window.MMPower.hide();if(DATA)renderTable();}renderNews();
  const pb=$("priceModeBtn"),vb=$("volMaModeBtn");
  if(pb&&vb){pb.classList.toggle("is-on",showPrice());vb.classList.toggle("is-on",showVolMa());
   pb.setAttribute("aria-pressed",showPrice());vb.setAttribute("aria-pressed",showVolMa());}}
@@ -162,7 +173,7 @@ async function load(){const tbl=$("tbl");if(!DATA)tbl.innerHTML='<tbody><tr><td 
  const[a,b]=await Promise.allSettled([getJSON("data/market.json"),getJSON("data/news.json")]);
  if(a.status==="fulfilled")DATA=a.value;else if(!DATA)tbl.innerHTML='<tbody><tr><td class="empty">Could not load data/market.json ('+esc(a.reason&&a.reason.message)+'). If you opened the file directly, serve the folder over HTTP.</td></tr></tbody>';
  if(b.status==="fulfilled")NEWS=b.value;
- if(DATA&&st.tab!==POWER&&!DATA.groups.some(g=>g.id===st.tab))st.tab=DATA.groups[0].id;if(st.sort&&!val[st.sort])st.sort=null;renderAll();window.MMCompany&&window.MMCompany.ready();}
+ if(st.sort&&!val[st.sort])st.sort=null;renderAll();window.MMCompany&&window.MMCompany.ready();if(pendingSub){const s=pendingSub;pendingSub=null;scrollSub(s);}}
 $("priceModeBtn").onclick=()=>{st.mode="price";save();renderAll();};
 $("volMaModeBtn").onclick=()=>{st.mode="volma";save();renderAll();};
 {const ex=$("explain");ex.open=st.explain==null?!NARROW.matches:st.explain;ex.addEventListener("toggle",()=>{st.explain=ex.open;save();});}
@@ -170,6 +181,27 @@ let ft;$("tblFilter").addEventListener("input",e=>{clearTimeout(ft);ft=setTimeou
 $("cmClose").onclick=closeChart;$("cmSimple").onclick=()=>{const f=$("cmFallback");f.hidden=!f.hidden;$("cmSimple").classList.toggle("is-on",!f.hidden);};$("chartModal").addEventListener("click",e=>{if(e.target.id==="chartModal")closeChart();});
 document.addEventListener("keydown",e=>{if(e.key==="Escape"&&!$("chartModal").hidden)closeChart();});
 setInterval(()=>DATA&&renderStamp(),60000);
-window.MMTable={data:()=>DATA,news:()=>NEWS,openChart:r=>openChart(r),reload:()=>{if(st.tab===POWER&&window.MMPower)window.MMPower.reload();return load();}};
+/* ---------- navigation + URL hash ---------- */
+const curView=()=>document.body.dataset.page==="monitor"?"charts":st.view;
+let subHash=null;
+function hashFor(){const v=curView();return v==="equities"?"equities/"+(EQ.find(e=>e[0]===st.eq)||EQ[0])[2]:v+(subHash&&v!=="charts"?"/"+subHash:"");}
+function writeHash(){if(/^#co=/.test(location.hash))return;const h="#"+hashFor();if(location.hash!==h)history.replaceState(history.state,"",location.pathname+location.search+h);}
+function parseHash(){let h="";try{h=decodeURIComponent(location.hash.slice(1));}catch(e){return null;}if(!h||h.startsWith("co="))return null;
+ if(LEGACY[h])h=LEGACY[h];else if(/^pw(Sec|News)/.test(h))h="power/"+h;const[v,sub]=h.split("/");return VIEWS.includes(v)?{v,sub:sub||null}:null;}
+function syncNav(){const v=curView();document.querySelectorAll("#mainNav [data-v]").forEach(b=>{const on=b.dataset.v===v;b.classList.toggle("is-on",on);b.setAttribute("aria-selected",on);b.tabIndex=on?0:-1;});}
+let pendingSub=null;
+function scrollSub(sub){if(!sub)return;const el=isMacro()?$("macro-"+sub):isPower()?$(sub):null;if(el)setTimeout(()=>el.scrollIntoView({block:"start"}),60);}
+function go(v,sub,fromHash){if(!VIEWS.includes(v))v="equities";subHash=(v==="macro"&&MAC.some(m=>m[0]===sub))||(v==="power"&&/^pw/.test(sub||""))?sub:null;
+ if(v==="charts"){window.MM&&window.MM.setPage("monitor");syncNav();if(!fromHash)writeHash();window.MMPower&&window.MMPower.hide();return;}
+ window.MM&&window.MM.setPage("table");const changed=st.view!==v;st.view=v;
+ if(v==="equities"&&sub){const e=EQ.find(x=>x[2]===sub||x[0]===sub);if(e)st.eq=e[0];}
+ if(changed){st.q="";$("tblFilter").value="";}
+ save();renderAll();if(!fromHash)writeHash();if(changed&&!sub)scrollTo({top:0});
+ if(sub){if(DATA)scrollSub(sub);else pendingSub=sub;}}
+document.querySelectorAll("#mainNav [data-v]").forEach(b=>b.onclick=()=>go(b.dataset.v));
+$("mainNav").addEventListener("keydown",e=>{if(e.key!=="ArrowRight"&&e.key!=="ArrowLeft")return;const bs=[...document.querySelectorAll("#mainNav [data-v]")];const i=bs.findIndex(b=>b.classList.contains("is-on"));const n=bs[(i+(e.key==="ArrowRight"?1:-1)+bs.length)%bs.length];n.focus();n.click();});
+window.addEventListener("hashchange",()=>{const r=parseHash();if(r)go(r.v,r.sub,true);});
+window.MMTable={data:()=>DATA,news:()=>NEWS,openChart:r=>openChart(r),reload:()=>{if(isPower()&&window.MMPower)window.MMPower.reload();return load();}};
+{const r=parseHash();if(r){go(r.v,r.sub,true);writeHash();}else if(document.body.dataset.page==="monitor"){syncNav();writeHash();}else{go(st.view,null);}}
 load();
 })();
