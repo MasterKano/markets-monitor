@@ -220,6 +220,18 @@ def _raw(d, key):
         return None
 
 
+def minor_unit_cap(mcap, ccy, px, shares):
+    """Yahoo reports marketCap in the major unit (GBP) even when the quote is in a minor unit (GBp pence).
+    Guard against the occasional small-cap record where the cap was computed from the pence price (100x too
+    high): if cap / (shares x price in major units) is ~100, scale it back. -> (mcap, fixed?)"""
+    if mcap is None or ccy not in MAJOR or not px or not shares:
+        return mcap, False
+    r = mcap / (shares * px / 100.0)
+    if 50 < r < 200:
+        return mcap / 100.0, True
+    return mcap, False
+
+
 def fetch_fundamentals(sym, crumb, tries=4):
     """Yahoo quoteSummary -> (marketCap, enterpriseValue, currency) or raise."""
     last_err = None
@@ -248,6 +260,11 @@ def fetch_fundamentals(sym, crumb, tries=4):
             ev = _raw(ks, "enterpriseValue")
             ccy = price.get("currency") or sd.get("currency")
             fccy = (res.get("financialData") or {}).get("financialCurrency")
+            mcap, fixed = minor_unit_cap(mcap, ccy, _raw(price, "regularMarketPrice"),
+                                         _raw(ks, "sharesOutstanding") or _raw(ks, "impliedSharesOutstanding"))
+            if fixed:
+                log(f"  {sym}: marketCap looked like {ccy} (minor unit) x shares; scaled /100")
+                ev = None          # Yahoo EV shares the same basis; rebuild from components instead
             return mcap, ev, ccy, fccy
         except LookupError as e:
             last_err = e
@@ -296,6 +313,9 @@ def balance_from_ts(ts):
     if cash is None:
         cash, _ = ts_latest(ts, "CashAndCashEquivalents")
     nd = (debt - cash) if debt is not None and cash is not None else ts_latest(ts, "NetDebt")[0]
+    if nd is None and debt is None and cash is not None:
+        # no debt line at all (Yahoo omits TotalDebt for debt-free small caps): net cash = -cash
+        nd, d = -cash, ts_latest(ts, "CashCashEquivalentsAndShortTermInvestments")[1] or ts_latest(ts, "CashAndCashEquivalents")[1]
     mi, _ = ts_latest(ts, "MinorityInterest")
     return dict(nd=nd, mi=mi, asof=d)
 
@@ -691,7 +711,7 @@ def main():
             volume="Last session volume vs average of the N sessions before it.",
             ma="Simple moving average of daily closes incl. the latest bar; % = price / MA - 1.",
             futures="Continuous front-month futures: long-horizon returns (esp. 10Y) include roll effects.",
-            mcap_ev="Yahoo marketCap. Equity EV = market cap + net debt (latest total debt minus cash & short-term investments) + minority interest, reporting-currency balance sheet converted at current FX (same as the company panel); Yahoo enterpriseValue only when components are missing (and for ETFs). Converted to EUR via Yahoo EUR{CCY}=X (ECB SDW mid fallback). GBp treated as GBP.",
+            mcap_ev="Yahoo marketCap. Equity EV = market cap + net debt (latest total debt minus cash & short-term investments) + minority interest, reporting-currency balance sheet converted at current FX (same as the company panel); Yahoo enterpriseValue only when components are missing (and for ETFs). Converted to EUR via Yahoo EUR{CCY}=X (ECB SDW mid fallback). London quotes are in pence (GBp); Yahoo market cap is in GBP (checked against shares x price, a 100x pence slip is scaled back).",
             last_close="When Yahoo's chart API leaves the latest daily close blank (common for Nordic/LSE tickers), the quote's regularMarketPrice for that session is used (last_from_quote).",
             prices="Latest price = Yahoo quote (regularMarketPrice / regularMarketTime; typically ~15 min delayed, not live); 1D vs the previous session's close. While a session is open the latest daily bar (and its volume) is today so far.",
         ),

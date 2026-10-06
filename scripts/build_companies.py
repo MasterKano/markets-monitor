@@ -17,7 +17,7 @@ import argparse, datetime as dt, json, math, os, random, re, sys, time
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 from universe import GROUPS  # noqa: E402
-from build_data import SESSION, MAJOR, yahoo_crumb, build_fx_table, log, balance_from_ts, calc_ev  # noqa: E402
+from build_data import SESSION, MAJOR, yahoo_crumb, build_fx_table, log, balance_from_ts, calc_ev, minor_unit_cap  # noqa: E402
 
 ROOT = os.path.dirname(HERE)
 UTC = dt.timezone.utc
@@ -233,6 +233,7 @@ def shape(sym, spec, qs, ts, ts_ccy, fx, now):
 
     px = num(price.get("regularMarketPrice")) or num(fd.get("currentPrice"))
     mcap = num(price.get("marketCap")) or num(sd.get("marketCap"))   # Yahoo reports cap in the major unit
+    mcap, cap_fixed = minor_unit_cap(mcap, pccy, px, num(ks.get("sharesOutstanding")) or num(ks.get("impliedSharesOutstanding")))
     annual = series(ts, "annual", N_ANNUAL)
     quarterly = series(ts, "quarterly", N_QUARTER)
     t12 = ttm(ts, quarterly)
@@ -245,7 +246,7 @@ def shape(sym, spec, qs, ts, ts_ccy, fx, now):
     # EV in trading currency: market cap + net debt (+ minorities), converting the reporting-currency
     # balance sheet first. Yahoo's own enterpriseValue mixes currencies for cross-currency reporters.
     mcap_f = fx.conv(mcap, pmaj, fccy)
-    ev, ev_src = calc_ev(mcap, pccy, bal, fccy, num(ks.get("enterpriseValue")), fx.t)
+    ev, ev_src = calc_ev(mcap, pccy, bal, fccy, None if cap_fixed else num(ks.get("enterpriseValue")), fx.t)
     ev_f = fx.conv(ev, pmaj, fccy)
 
     def ratio(a, b, lo=None):

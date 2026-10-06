@@ -8,7 +8,7 @@ Immediate share link (no Pages wait): https://raw.githack.com/MasterKano/markets
 
 Top-level tabs (URL hash in brackets; older hashes such as `#nordic`, `#rates`, `#monitor` redirect):
 
-- **Equities** (default, `#equities/<chip>`): chips Renewables (incl. benchmarks and strategic peers), Oil & Gas,
+- **Equities** (default, `#equities/<chip>`): chips Renewables (incl. benchmarks and strategic peers), Oil & Gas (incl. London-listed E&Ps),
   Metals & Mining, Lundin Group. Price returns 1D to 10Y, volume vs 5/20/50-day averages (ratio highlighted above 1.5x),
   distance from 10/20/50/200-day moving averages, a 1-year sparkline, market cap / EV in EUR, company panel and news.
 - **Macro** (`#macro[/indices|commodities|rates]`): Indices, Commodities and Rates & FX as sections on one page (no
