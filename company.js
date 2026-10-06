@@ -71,10 +71,10 @@ function head(c,r){const name=(r&&r.name)||(c&&c.name)||cur;const px=r&&isNum(r.
 function lineChart(r){const p=r&&r.spark;if(!p||p.length<2)return'<div class="co-chart-empty">No price history available.</div>';
  const w=600,h=200;let mn=Math.min(...p),mx=Math.max(...p);const lo=mn,hi=mx;if(mx===mn)mx=mn+1;
  const pts=p.map((v,i)=>[(i/(p.length-1))*w,h-10-((v-mn)/(mx-mn))*(h-24)]);const d=pts.map((q,i)=>(i?"L":"M")+q[0].toFixed(1)+" "+q[1].toFixed(1)).join("");
- const up=p[p.length-1]>=p[0],c=up?"var(--good)":"var(--bad)";const chg=(p[p.length-1]/p[0]-1)*100;
- return'<div class="co-line"><svg viewBox="0 0 '+w+' '+h+'" preserveAspectRatio="none" aria-label="1-year price line"><defs><linearGradient id="coGrad" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stop-color="'+c+'" stop-opacity=".28"/><stop offset="1" stop-color="'+c+'" stop-opacity="0"/></linearGradient></defs>'+
+ const up=p[p.length-1]>=p[0],c=up?"var(--good)":"var(--bad)";const chg=r.pct&&isNum(r.pct["1Y"])?r.pct["1Y"]:(p[p.length-1]/p[0]-1)*100;/* same 1Y figure as the table */
+ return'<div class="co-line"><svg viewBox="0 0 '+w+' '+h+'" preserveAspectRatio="none" role="img" aria-label="1-year price line, daily closes, '+esc(ccyLab(r.ccy))+'"><defs><linearGradient id="coGrad" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stop-color="'+c+'" stop-opacity=".28"/><stop offset="1" stop-color="'+c+'" stop-opacity="0"/></linearGradient></defs>'+
   '<path d="'+d+'L'+w+' '+h+'L0 '+h+'Z" fill="url(#coGrad)"/><path d="'+d+'" fill="none" stroke="'+c+'" stroke-width="2" vector-effect="non-scaling-stroke" stroke-linejoin="round"/></svg>'+
-  '<div class="co-line-axis"><span>'+esc(dateTxt(r.spark_from)||"")+'</span><span>1Y '+pct(chg)+' · hi '+fpx(hi)+' · lo '+fpx(lo)+'</span><span>'+esc(dateTxt(r.bar_date)||"")+'</span></div></div>';}
+  '<div class="co-line-axis"><span>'+esc(dateTxt(r.spark_from)||"")+'</span><span>1Y '+pct(chg)+' · hi '+fpx(hi)+' · lo '+fpx(lo)+(r.ccy?' '+esc(ccyLab(r.ccy)):"")+'</span><span>'+esc(dateTxt(r.bar_date)||"")+'</span></div></div>';}
 function chartSec(r){const tv=r&&r.tv;const seg=tv?'<div class="seg co-seg" role="group" aria-label="Chart type"><button class="button" type="button" data-chart="line">1Y line</button><button class="button" type="button" data-chart="tv">Interactive</button></div>':"";
  return sec("coChartSec","Price",'<div class="co-chart" id="coChart"></div>',seg);}
 function drawChart(r){const box=$("coChart");if(!box)return;const tv=r&&r.tv;if(!chartMode)chartMode=tv&&!PHONE.matches?"tv":"line";if(!tv)chartMode="line";

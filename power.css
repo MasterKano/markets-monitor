@@ -175,3 +175,17 @@ tr.is-now .pw-now,.pw-now.on{background:var(--accent);border-color:var(--accent)
 .pw-wk{grid-template-columns:repeat(3,minmax(0,1fr))}
 @media(max-width:760px){.pw-t{display:none}.pw-wk{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:760px){.pw-res .c-spark{display:none}}
+/* chart labelling: title (what + where) · unit, subtitle (period · resolution · tz · source), axis units, legend swatches */
+.pw-ttl{flex:1 1 260px;min-width:0}
+.pw-card .pw-card-head .panel-title{white-space:normal;overflow:visible;text-overflow:clip;overflow-wrap:anywhere}
+.pw-u{color:var(--muted);font-weight:550}
+.pw-card-sub{display:block;margin-top:2px;color:var(--muted);font-size:10.5px;line-height:1.4;opacity:.92}
+.pw-key svg.pw-kl{flex:none;display:block}
+.pw-svg .yu{fill:var(--muted);font-size:9.5px;font-weight:650}
+.pw-svg .xu{fill:var(--muted);font-size:9px;font-weight:650;text-anchor:end}
+.pw-svg .vg{stroke:var(--border);stroke-width:1;opacity:.7}
+.pw-svg .nw{stroke:var(--muted);stroke-width:1;stroke-dasharray:2 2;opacity:.8}
+.pw-svg .nwt{fill:var(--muted);font-size:9px}
+.pw-card>.pw-keys.pw-pad{margin:-2px 0 2px}
+.pw-mix>.pw-mini-h{margin-top:0}
+@media(max-width:760px){.pw-card-sub{font-size:10px}.pw-ttl{flex-basis:100%}}
