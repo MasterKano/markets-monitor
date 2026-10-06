@@ -49,11 +49,16 @@ news only), and on demand, and commits:
   raw.githubusercontent.com (using whichever of that and `data/market.json` is newer).
 - `data/news.json` from `scripts/build_news.py`: Google News RSS searches plus exchange announcements
   (Oslo Børs NewsWeb, Nasdaq Nordic). Headlines and links only. FT excluded.
-- `data/companies.json` from `scripts/build_companies.py` (05:30 and 21:00 runs): per-equity fundamentals keyed by
-  Yahoo symbol for the company panel (click a company name in the Table; shareable as `#co=SYMBOL`). Yahoo
-  quoteSummary (valuation, consensus, estimates, calendar, profile) plus the fundamentals-timeseries endpoint
-  (revenue, EBITDA, net income, net debt, FCF: last 4 years, last 4 quarters, TTM). EV = market cap + net debt
-  (+ minorities) with the balance sheet converted at current FX. Per-symbol failures keep the previous entry.
+- `data/companies.json` + `data/co/SYMBOL.json` from `scripts/build_companies.py` (05:30 and 21:00 runs): the
+  company page (click a company name in the Table; shareable as `#co=SYMBOL&tab=fin|analysts|own|mgmt`).
+  `companies.json` is a small index (price, valuation, consensus, key stats, dates) read with the Table;
+  `data/co/SYMBOL.json` holds the detail loaded on demand when a page opens: profile, officers and pay,
+  governance scores, ownership and top holders, insider transactions and holders, recommendation trend,
+  rating changes, estimates and revisions, earnings surprises, full income / balance / cash-flow statements
+  (5 years, 6 quarters, TTM), ratios and dividend history. Sources: Yahoo quoteSummary, the
+  fundamentals-timeseries endpoint and the chart endpoint (dividends), fetched with 4 threads. EV = market cap
+  + net debt (+ minorities) with the balance sheet converted at current FX. Per-symbol failures keep the previous
+  files; detail files are only rewritten when their content changes.
 
 - `data/symbols.json` from `scripts/build_symbols.py`: offline Markets chart autofill catalog (name + TradingView
   `EXCH:SYM` + kind). Built from Nasdaq Trader directories and a filtered free ticker database for LSE/AIM, OMXSTO,
