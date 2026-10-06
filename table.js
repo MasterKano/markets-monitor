@@ -45,7 +45,7 @@ const secLab=sec=>{const f=SEC_FIX[sec.label];return f?{label:f.label,note:f.not
 const isCo=r=>r.kind==="equity"&&!!window.MMCompany;
 const grp=id=>DATA&&DATA.groups.find(x=>x.id===id)||null;
 function feur(v){if(!isNum(v))return NA;const a=Math.abs(v);if(a>=1e12)return(v/1e12).toFixed(2)+"T";if(a>=1e9)return(v/1e9).toFixed(a>=1e11?1:2)+"B";if(a>=1e6)return(v/1e6).toFixed(a>=1e8?0:a>=1e7?1:2)+"M";if(a>=1e3)return(v/1e3).toFixed(0)+"K";return String(Math.round(v));}
-function fundTip(r,kind){const raw=kind==="ev"?r.ev:r.mcap;const eur=kind==="ev"?r.ev_eur:r.mcap_eur;const ccy=r.mcap_ccy||r.ccy||"";
+function fundTip(r,kind){const raw=kind==="ev"?r.ev:r.mcap;const eur=kind==="ev"?r.ev_eur:r.mcap_eur;const ccy0=r.mcap_ccy||r.ccy||"";const ccy=({GBp:"GBP",GBX:"GBP",ILA:"ILS",ZAc:"ZAR"})[ccy0]||ccy0;/* Yahoo cap/EV are in the major unit */
  const bits=[];if(isNum(eur))bits.push("€"+feur(eur).replace(/<[^>]+>/g,""));if(isNum(raw)&&ccy)bits.push(feur(raw).replace(/<[^>]+>/g,"")+" "+ccy);if(DATA&&DATA.fx_asof)bits.push("FX as of "+DATA.fx_asof);return bits.join(" · ");}
 
 /* ---------- columns ---------- */
