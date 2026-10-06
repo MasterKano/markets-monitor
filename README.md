@@ -54,12 +54,21 @@ news only), and on demand, and commits:
     raw.githubusercontent.com). Base-load Month/Quarter/Year futures for the Nordic system price, the Nordic zones
     (outright EEX Nordic Zonal Futures, not EPADs) and DE/FR/NL/GB/ES/IT, plus TTF, EUA, API2 coal and GoO wind.
     History starts 1 Sep 2026 (no backfill). Contracts already in delivery are excluded.
-  - Day-ahead prices per bidding zone from the Energy-Charts API (Fraunhofer ISE, CC BY 4.0; ~2 requests/minute, so
-    this step takes a few minutes). Fallbacks: Energinet Energi Data Service (DK1, DK2, NO2, SE3, SE4, DE) and
+  - Day-ahead prices (A44) for NO1–NO5, SE1–SE4, FI, DK1, DK2 plus DE-LU, PL, LT from the ENTSO-E Transparency
+    Platform (needs the `ENTSOE_API_TOKEN` env var / GitHub secret; 92 days of history). Fallbacks per zone:
+    Energy-Charts (Fraunhofer ISE, CC BY 4.0), Energinet Energi Data Service (DK1, DK2, NO2, SE3, SE4, DE) and
     spot-hinta.fi (today/tomorrow only). Daily averages from earlier runs are kept so 7d/30d averages survive outages.
     15-min prices are averaged to hourly; days are CET delivery days and are shown in Geneva time.
+  - ENTSO-E SE4 detail: wind/solar actual (A75) vs day-ahead forecast (A69, short horizon only), load actual vs
+    day-ahead forecast and week-ahead min/max (A65), physical flows on SE4 borders (A11, fallback for SVK),
+    unavailabilities (A78 interconnectors, A80 generation aggregated by fuel; no unit/plant/line names) and weekly
+    reservoir stored energy (A72) for SE1–SE4 / NO1–NO5. Wind/solar capture prices (7d/30d, daily, and expected
+    today/tomorrow from the forecast) are computed from A44 × A75/A69. ~60 requests per run, throttled well below the
+    400/min limit, retried on 429/5xx; failed parts keep the previous values. The token is never logged.
   - Hydro: NVE magasinstatistikk API (Norway and NO1–NO5, weekly) and the Energiföretagen weekly PDF (Sweden snapshot).
-  - Capture prices are computed (generation-weighted average price) only where Energy-Charts publishes generation.
+  - FI / DE-LU capture prices use Energy-Charts generation.
+  - Schedule: power runs at 05:30 and 12:30 UTC on weekdays (12:30 captures tomorrow's day-ahead prices) and at 12:30
+    UTC on Saturdays and Sundays.
 
 Local run: `pip install -r scripts/requirements.txt && python scripts/build_data.py && python scripts/build_news.py && python scripts/build_power.py && python scripts/build_symbols.py && python scripts/build_companies.py`,
 then `python -m http.server` and open http://localhost:8000/.
