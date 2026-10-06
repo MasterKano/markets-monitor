@@ -12,13 +12,12 @@ const EQ=[["nordic","Renewables","renewables"],["energy","Oil & Gas","oil-gas"],
 const MAC=[["indices","Indices"],["commodities","Commodities"],["rates","Rates & FX"]];
 const VIEWS=["equities","macro","power","charts"];
 const LEGACY={nordic:"equities/renewables",energy:"equities/oil-gas",metals:"equities/metals",lundin:"equities/lundin",indices:"macro/indices",commodities:"macro/commodities",rates:"macro/rates",monitor:"charts",table:"equities",markets:"equities",power:"power"};
-const st=Object.assign({view:"equities",eq:"nordic",mode:"price",explain:null,sort:null,dir:-1,q:""},(()=>{try{return JSON.parse(localStorage.getItem(LS)||"{}");}catch(e){return{};}})());
-if(st.mode!=="volma")st.mode="price";
+const st=Object.assign({view:"equities",eq:"nordic",explain:null,sort:null,dir:-1,q:""},(()=>{try{return JSON.parse(localStorage.getItem(LS)||"{}");}catch(e){return{};}})());
+delete st.mode;/* Price / Volume+MA toggle removed: all column groups are always shown */
 if(st.tab){/* v2 state: single tab id */if(st.tab==="power")st.view="power";else if(EQ.some(e=>e[0]===st.tab)){st.view="equities";st.eq=st.tab;}else if(MAC.some(m=>m[0]===st.tab))st.view="macro";delete st.tab;}
 if(!["equities","macro","power"].includes(st.view))st.view="equities";if(!EQ.some(e=>e[0]===st.eq))st.eq="nordic";
-const save=()=>{try{localStorage.setItem(LS,JSON.stringify({view:st.view,eq:st.eq,mode:st.mode,explain:st.explain,sort:st.sort,dir:st.dir}));}catch(e){}};
+const save=()=>{try{localStorage.setItem(LS,JSON.stringify({view:st.view,eq:st.eq,explain:st.explain,sort:st.sort,dir:st.dir}));}catch(e){}};
 const isPower=()=>st.view==="power",isMacro=()=>st.view==="macro";
-const showPrice=()=>st.mode==="price",showVolMa=()=>st.mode==="volma";
 let DATA=null,NEWS=null;
 const $=id=>document.getElementById(id);
 const esc=s=>String(s==null?"":s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
@@ -85,8 +84,9 @@ function scales(rs){const out={},outbp={};for(const k of PCT){const a=rs.filter(
 function cell(c,r,S){const k=c.k,hid=c.hide?" c-opt":"";
  if(k==="name"){const sub=[r.sym,r.ccy].filter(Boolean).join(" · ");
   const flags=(r.note?'<span class="info" title="'+esc(r.note)+'">i</span>':"")+(r.error?'<span class="info bad" title="'+esc(r.error)+'">!</span>':"");
-  const co=isCo(r);const nm=co?'<button type="button" class="nm co-link" aria-label="'+esc(r.name+": company profile")+'">'+esc(r.name)+'</button>':'<span class="nm">'+esc(r.name)+'</span>';
-  return'<th scope="row" class="c-name'+(co?" has-co":"")+'"'+(r.note?' title="'+esc(r.name+" — "+r.note+(co?" · click for company profile":""))+'"':' title="'+esc(r.name+(co?" · click for company profile":r.bar_date?" · last bar "+r.bar_date:""))+'"')+'>'+nm+flags+'<span class="sym">'+esc(sub)+'</span></th>';}
+  const co=isCo(r);/* name colour = sign of today's move (1D %, yields in bp); |move| < 0.005 (float noise) counts as flat */
+  const p1=r.pct&&r.pct["1D"],dv=r.error?null:r.kind==="yield"?(r.bp&&r.bp["1D"]):isNum(p1)?p1:(isNum(r.chg)&&r.px?r.chg/(r.px-r.chg)*100:null);const ds=isNum(dv)&&Math.abs(dv)>=0.005?(dv>0?" nm-up":" nm-dn"):"";const nm=co?'<button type="button" class="nm co-link" aria-label="'+esc(r.name+": company profile")+'">'+esc(r.name)+'</button>':'<span class="nm">'+esc(r.name)+'</span>';
+  return'<th scope="row" class="c-name'+(co?" has-co":"")+ds+'"'+(r.note?' title="'+esc(r.name+" — "+r.note+(co?" · click for company profile":""))+'"':' title="'+esc(r.name+(co?" · click for company profile":r.bar_date?" · last bar "+r.bar_date:""))+'"')+'>'+nm+flags+'<span class="sym">'+esc(sub)+'</span></th>';}
  if(r.error&&k!=="name")return'<td class="na-cell'+hid+'">'+NA+'</td>';
  if(k==="px"){const q=quoteLabel(r);return'<td class="num px c-px"'+(q?' title="'+esc(q.tip)+'"':"")+'>'+fpx(r.px,r.kind)+(q?'<span class="qt">'+esc(q.txt)+'</span>':"")+'</td>';}
  if(k==="mcap"){const v=r.mcap_eur;return'<td class="num c-mcap"'+(isNum(v)?' title="'+esc(fundTip(r,"mcap"))+'"':"")+'>'+feur(v)+'</td>';}
@@ -118,7 +118,7 @@ function renderMovers(rs){const box=$("tblMovers");const ok=rs.filter(r=>!r.erro
  if(above!=null)h+='<span class="mover static"><span class="ml">Above 200d</span><b>'+above+'%</b> of names</span>';
  box.innerHTML=h;box.querySelectorAll("button[data-sym]").forEach(b=>b.onclick=()=>{const r=rs.find(x=>x.sym===b.dataset.sym);r&&openChart(r);});}
 const gsMark=(h,c)=>c.gs?h.replace('class="','class="gs '):h;
-function visCols(){const V=COLS.filter(c=>{if(c.g==="price")return showPrice();if(c.g==="vol"||c.g==="ma")return showVolMa();if(isMacro()&&(c.k==="mcap"||c.k==="ev"))return false;return true;});
+function visCols(){const V=COLS.filter(c=>!(isMacro()&&(c.k==="mcap"||c.k==="ev")));
  V.forEach(c=>c.gs=false);GROUPS.forEach(([id])=>{if(!id)return;const f=V.find(c=>c.g===id);if(f)f.gs=true;});return V;}
 function tableHtml(g,V,S,q){
  let head='<thead><tr class="grp">';GROUPS.forEach(([id,l])=>{const n=V.filter(c=>c.g===id).length;if(!n)return;head+='<th scope="colgroup" class="g-'+(id||"name")+(id?" gs":"")+'" colspan="'+n+'"><span class="gl">'+esc(l)+'</span></th>';});
@@ -152,10 +152,7 @@ function renderNews(){const box=$("newsList"),hd=$("newsTitle"),meta=$("newsMeta
  const items=newsItems();meta.textContent="Updated "+gf.format(new Date(NEWS.generated_utc))+" Geneva";
  if(!items.length){box.innerHTML='<li class="news-empty">No recent headlines.</li>';return;}
  box.innerHTML=items.map(it=>{const u=/^https?:\/\//i.test(it.url)?it.url:"#";return'<li class="news-item'+(it.kind==="exchange"?" ex":"")+'"><time datetime="'+esc(it.time)+'">'+esc(gfs.format(new Date(it.time)))+'</time><a href="'+esc(u)+'" target="_blank" rel="noopener noreferrer">'+esc(it.title)+'</a><span class="src">'+(it.kind==="exchange"?'<span class="badge">Exchange</span>':"")+esc(it.source)+'</span></li>';}).join("");}
-function renderAll(){const pw=isPower();document.body.classList.toggle("is-power",pw);["equities","macro","power"].forEach(v=>document.body.classList.toggle("view-"+v,st.view===v));renderTabs();syncNav();renderStamp();if(pw){window.MMPower&&window.MMPower.show();}else{window.MMPower&&window.MMPower.hide();if(DATA)renderTable();}renderNews();
- const pb=$("priceModeBtn"),vb=$("volMaModeBtn");
- if(pb&&vb){pb.classList.toggle("is-on",showPrice());vb.classList.toggle("is-on",showVolMa());
-  pb.setAttribute("aria-pressed",showPrice());vb.setAttribute("aria-pressed",showVolMa());}}
+function renderAll(){const pw=isPower();document.body.classList.toggle("is-power",pw);["equities","macro","power"].forEach(v=>document.body.classList.toggle("view-"+v,st.view===v));renderTabs();syncNav();renderStamp();if(pw){window.MMPower&&window.MMPower.show();}else{window.MMPower&&window.MMPower.hide();if(DATA)renderTable();}renderNews();}
 
 /* ---------- chart modal ---------- */
 function yahooUrl(s){return"https://finance.yahoo.com/quote/"+encodeURIComponent(s);}
@@ -185,8 +182,6 @@ async function load(){const tbl=$("tbl");if(!DATA)tbl.innerHTML='<tbody><tr><td 
  if(a.status==="fulfilled")DATA=a.value;else if(!DATA)tbl.innerHTML='<tbody><tr><td class="empty">Could not load data/market.json ('+esc(a.reason&&a.reason.message)+'). If you opened the file directly, serve the folder over HTTP.</td></tr></tbody>';
  if(b.status==="fulfilled")NEWS=b.value;
  if(st.sort&&!val[st.sort])st.sort=null;renderAll();window.MMCompany&&window.MMCompany.ready();if(pendingSub){const s=pendingSub;pendingSub=null;scrollSub(s);}}
-$("priceModeBtn").onclick=()=>{st.mode="price";save();renderAll();};
-$("volMaModeBtn").onclick=()=>{st.mode="volma";save();renderAll();};
 {const ex=$("explain");ex.open=st.explain==null?!NARROW.matches:st.explain;ex.addEventListener("toggle",()=>{st.explain=ex.open;save();});}
 let ft;$("tblFilter").addEventListener("input",e=>{clearTimeout(ft);ft=setTimeout(()=>{st.q=e.target.value;renderTable();},120);});
 $("cmClose").onclick=closeChart;$("cmSimple").onclick=()=>{const f=$("cmFallback");f.hidden=!f.hidden;$("cmSimple").classList.toggle("is-on",!f.hidden);};$("chartModal").addEventListener("click",e=>{if(e.target.id==="chartModal")closeChart();});

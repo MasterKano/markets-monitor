@@ -8,7 +8,7 @@
 <meta name="description" content="Markets Monitor: daily cross-asset dashboard for Nordic renewables, energy, mining, commodities, indices, rates and FX.">
 <link rel="icon" href="data:,">
 <link rel="stylesheet" href="styles.css?v=20261006d">
-<link rel="stylesheet" href="table.css?v=20261006f">
+<link rel="stylesheet" href="table.css?v=20261006g">
 <link rel="stylesheet" href="power.css?v=20261006d">
 <link rel="stylesheet" href="company.css?v=20261006b">
 </head>
@@ -31,6 +31,7 @@
       <button class="main-tab" type="button" role="tab" data-v="power" aria-selected="false">Power</button>
       <button class="main-tab" type="button" role="tab" data-v="charts" aria-selected="false">Charts</button>
     </nav>
+    <p class="delay-note" id="delayNote" title="Prices refresh every 15 min during market hours (Yahoo quotes, ~15 min delayed). Market cap and EV in EUR; yield changes in basis points."><span class="note-long">Prices refresh every 15 min in market hours (Yahoo, ~15 min delayed)</span><span class="note-short">Prices every 15 min · ~15 min delay</span><span class="eq-only"> · Mkt cap &amp; EV in EUR</span><span class="macro-only"> · Yields in bp</span></p>
     <span class="toolbar-spacer"></span>
     <div class="chart-tools" id="chartTools">
       <label class="field" for="intervalSelect" title="Sets the timeframe on all four charts"><span class="field-label">Timeframe<small class="field-hint">applies to all 4 charts</small></span>
@@ -60,29 +61,27 @@
     <button class="button is-on" id="addConfirmButton" type="button">Add</button>
   </div>
   <section class="page is-on" id="tablePage">
-    <p class="delay-note" id="delayNote">Prices refresh every 15 min during market hours (Yahoo, ~15 min delayed). <span class="eq-only">Market cap and EV in EUR.</span><span class="macro-only">Yield changes in basis points.</span></p>
+    <div class="tbl-head">
+      <div class="tbl-top">
+        <div class="tbl-tabs" id="tblTabs" role="tablist" aria-label="Equity groups"></div>
+        <input id="tblFilter" class="tbl-filter" type="search" placeholder="Filter names" aria-label="Filter names" autocomplete="off" spellcheck="false">
+      </div>
+      <div class="tbl-bar">
+        <div class="movers" id="tblMovers"></div>
+        <span class="tbl-stamp" id="tblStamp"></span>
+      </div>
+    </div>
+    <div class="tbl-wrap" id="tblWrap"><table class="mtable" id="tbl"></table></div>
+    <div class="macro" id="macroWrap"></div>
+    <p class="tbl-foot" id="tblFoot"></p>
     <details class="explain" id="explain" open>
       <summary><span class="explain-title">How to read this table</span><span class="explain-hint">Price · Volume · Moving averages · Cap</span></summary>
       <div class="explain-grid">
-        <div class="ex-item ex-price"><h3>Price</h3><p><b>Last</b> = latest Yahoo quote (local ccy; ~15 min delayed). Grey = quote time (Geneva) while open, else last close date. Price returns only (no dividends). As of <b id="exAsOf">…</b>.</p></div>
+        <div class="ex-item ex-price"><h3>Price</h3><p><b>Last</b> = latest Yahoo quote (local ccy; ~15 min delayed). Grey = quote time (Geneva) while open, else last close date. Price returns only (no dividends). Name colour = today's move (<span class="up">up</span> / <span class="dn">down</span>). As of <b id="exAsOf">…</b>.</p></div>
         <div class="ex-item ex-vol"><h3>Volume</h3><p>Ratio = last ÷ N-day average (5/20/50). Last = today so far while a market is open. <b>1.0×</b> = average day; <span class="hot-key">&gt; 1.5×</span> highlighted. Grey figure = N-day avg volume.</p></div>
         <div class="ex-item ex-ma"><h3>Moving averages &amp; cap</h3><p>% vs N-day SMA: <span class="up">+%</span> above <i class="dot above"></i>, <span class="dn">−%</span> below <i class="dot below"></i>. <b>Mkt cap</b> / <b>EV</b> in EUR (Yahoo; FX as of <b id="exFxAsOf">…</b>). Yields in bp.</p></div>
       </div>
     </details>
-    <div class="tbl-tabs" id="tblTabs" role="tablist" aria-label="Equity groups"></div>
-    <div class="tbl-bar">
-      <div class="seg mode-seg" role="group" aria-label="Column mode">
-        <button class="button" id="priceModeBtn" type="button" aria-pressed="true" title="Show price-return columns">Price</button>
-        <button class="button" id="volMaModeBtn" type="button" aria-pressed="false" title="Show volume and moving-average columns">Volume + MA</button>
-      </div>
-      <input id="tblFilter" class="tbl-filter" type="search" placeholder="Filter names" autocomplete="off" spellcheck="false">
-      <span class="toolbar-spacer"></span>
-      <span class="tbl-stamp" id="tblStamp"></span>
-    </div>
-    <div class="movers" id="tblMovers"></div>
-    <div class="tbl-wrap" id="tblWrap"><table class="mtable" id="tbl"></table></div>
-    <div class="macro" id="macroWrap"></div>
-    <p class="tbl-foot" id="tblFoot"></p>
     <nav class="pw-subnav" id="pwSubnav" aria-label="Nordic Power sections"></nav>
     <div class="power-view" id="powerView"></div>
     <section class="news-panel" id="pwNews" aria-labelledby="newsTitle">
@@ -151,6 +150,6 @@
 <script src="power-map.js?v=20261006c"></script>
 <script src="power.js?v=20261006c"></script>
 <script src="company.js?v=20261006c"></script>
-<script src="table.js?v=20261006e"></script>
+<script src="table.js?v=20261006f"></script>
 </body>
 </html>
