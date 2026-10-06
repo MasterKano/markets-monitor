@@ -9,7 +9,7 @@ const PANELS=[
 {id:"rates",label:"Rates / Bonds",options:[["TLT 20Y+ Treasury","NASDAQ:TLT"],["TLH 10-20Y Treasury","AMEX:TLH"],["IEF 7-10Y Treasury","NASDAQ:IEF"],["IEI 3-7Y Treasury","NASDAQ:IEI"],["SHY 1-3Y Treasury","NASDAQ:SHY"],["VGSH Short Treasury","NASDAQ:VGSH"],["BIL 1-3M T-Bills","AMEX:BIL"],["TIP TIPS","AMEX:TIP"],["BND Total Bond","NASDAQ:BND"],["MBB MBS","NASDAQ:MBB"],["LQD IG Corporate","AMEX:LQD"],["HYG High Yield","AMEX:HYG"],["EMB EM USD Debt","NASDAQ:EMB"]]}
 ];
 /* preset chips under the Markets chart */
-const HOT=[["Apple","NASDAQ:AAPL"],["Microsoft","NASDAQ:MSFT"],["Nvidia","NASDAQ:NVDA"],["Amazon","NASDAQ:AMZN"],["Meta","NASDAQ:META"],["Alphabet","NASDAQ:GOOGL"],["Tesla","NASDAQ:TSLA"],["Berkshire","NYSE:BRK.B"],["Nestle","SIX:NESN"],["Roche","SIX:ROG"],["Novartis","SIX:NOVN"],["UBS","SIX:UBSG"],["ASML","EURONEXT:ASML"],["LVMH","EURONEXT:MC"],["Toyota","TSE:7203"]];
+const HOT=[["Apple","NASDAQ:AAPL"],["Microsoft","NASDAQ:MSFT"],["Nvidia","NASDAQ:NVDA"],["Amazon","NASDAQ:AMZN"],["Meta","NASDAQ:META"],["Alphabet","NASDAQ:GOOGL"],["Tesla","NASDAQ:TSLA"],["Berkshire","NYSE:BRK.B"],["Nestle","SIX:NESN"],["Roche","SIX:ROG"],["Novartis","SIX:NOVN"],["UBS","SIX:UBSG"],["ASML","EURONEXT:ASML"],["LVMH","EURONEXT:MC"],["Toyota (ADR)","NYSE:TM"]];
 /* bootstrap search list from scripts/universe.py; full catalog is data/symbols.json (see scripts/build_symbols.py). */
 const UNIVERSE=[
 ["Cloudberry Clean Energy","OSL:CLOUD","Stock"],
@@ -112,10 +112,10 @@ async function loadSymbolIndex(){try{const r=await fetch("data/symbols.json",{ca
   const st=$("appStatus");if(st)st.textContent="Symbol index "+INDEX_META.count+" names";}catch(e){/* keep bootstrap LOCAL */}}
 const KEY="markets-monitor:v6",MAX_RECENT=8;
 const $=id=>document.getElementById(id);
-function defState(){return{page:"table",tableLanding:true,tableChart:{name:"",symbol:""},interval:"D",studies:"ma",layout:"grid",theme:"dark",phoneIndex:0,selections:Object.fromEntries(PANELS.map(p=>[p.id,p.options[0][1]])),custom:Object.fromEntries(PANELS.map(p=>[p.id,[]]))};}
+function defState(){return{page:"table",tableLanding:true,tableChart:{name:"",symbol:""},interval:"D",studies:"ma",layout:"grid",theme:"dark",simple:false,phoneIndex:0,selections:Object.fromEntries(PANELS.map(p=>[p.id,p.options[0][1]])),custom:Object.fromEntries(PANELS.map(p=>[p.id,[]]))};}
 function load(){const c=defState();try{const s=JSON.parse(localStorage.getItem(KEY)||"null");if(!s)return c;
  if(s.page)c.page=s.tableLanding?(s.page==="equities"?"monitor":s.page):"table";if(c.page!=="table"&&c.page!=="monitor")c.page="table";
- ["interval","studies","layout","theme"].forEach(k=>{if(s[k])c[k]=s[k];});if(s.selections)PANELS.forEach(p=>{if(s.selections[p.id])c.selections[p.id]=s.selections[p.id];});
+ ["interval","studies","layout","theme"].forEach(k=>{if(s[k])c[k]=s[k];});c.simple=!!s.simple;if(s.selections)PANELS.forEach(p=>{if(s.selections[p.id])c.selections[p.id]=s.selections[p.id];});
  /* the old Rates list used NASDAQ: for NYSE Arca ETFs; map saved picks onto the corrected symbols */
  const FIX={"NASDAQ:BIL":"AMEX:BIL","NASDAQ:HYG":"AMEX:HYG","NASDAQ:LQD":"AMEX:LQD","TVC:DXY":"NASDAQ:TLT"};if(FIX[c.selections.rates])c.selections.rates=FIX[c.selections.rates];
  if(s.custom)PANELS.forEach(p=>{if(Array.isArray(s.custom[p.id]))c.custom[p.id]=s.custom[p.id];});}catch(e){}return c;}
@@ -127,12 +127,24 @@ function nameOf(id){const s=state.selections[id];const m=opts(id).find(o=>o[1]==
 function studies(k=state.studies){const a=[];if(k.includes("ma"))a.push({id:"MASimple@tv-basicstudies",inputs:{length:50}},{id:"MASimple@tv-basicstudies",inputs:{length:100}},{id:"MASimple@tv-basicstudies",inputs:{length:200}});if(k.includes("vol"))a.push({id:"Volume@tv-basicstudies"});if(k.includes("rsi"))a.push({id:"RSI@tv-basicstudies",inputs:{length:14}});return a;}
 function loadTV(){if(window.TradingView)return Promise.resolve(window.TradingView);if(tvP)return tvP;tvP=new Promise((res,rej)=>{const s=document.createElement("script");s.src="https://s3.tradingview.com/tv.js";s.async=true;s.onload=()=>window.TradingView?res(window.TradingView):rej(Error("TradingView did not initialise"));s.onerror=()=>{tvP=null;rej(Error("TradingView script blocked or offline"));};document.head.append(s);});return tvP;}
 function status(id,mode,msg){const el=$("status_"+id);if(!el)return;if(mode==="ready"){el.hidden=true;el.replaceChildren();return;}el.hidden=false;el.textContent=msg||"";}
-async function render(id,force){const r=runtime[id];if(!r)return;if(!force&&!r.vis&&!r.done)return;r.done=true;const box=$("chart_"+id);if(!box)return;box.replaceChildren();
+/* TradingView's free embed refuses some exchanges (LSE, HKEX, Tokyo, TVC indices): those get our own chart (pxchart.js).
+   The Markets panel's "Simple" button forces the own chart for any symbol. */
+const PX=window.PXChart;
+const own=(id,sym)=>!!PX&&(!PX.embeddable(sym)||(id==="markets"&&state.simple));
+function rowFor(sym){try{const D=window.MMTable&&window.MMTable.data();if(!D)return null;for(const g of D.groups)for(const s of g.sections)for(const r of s.rows)if(r.tv===sym)return r;}catch(e){}return null;}
+async function drawOwn(id,box,sym,nm,tf,stu,alive){
+ try{const data=await PX.load(sym,tf);if(!alive())return;PX.paint(box,data,{symbol:sym,name:nm,interval:tf,studies:stu});}
+ catch(e){if(!alive())return;const sp=PX.fromSpark(rowFor(sym));
+  if(sp)PX.paint(box,sp,{symbol:sym,name:nm,interval:"D",studies:"",note:"Backup: 1Y closes from the table data (price feed unavailable: "+e.message+")"});else PX.message(box,sym,nm,e.message);}
+ status(id,"ready");}
+async function render(id,force){const r=runtime[id];if(!r)return;if(!force&&!r.vis&&!r.done)return;r.done=true;const box=$("chart_"+id);if(!box)return;PX&&PX.clear(box);box.replaceChildren();
  const tgt=id==="tablechart"?state.tableChart:null;const sym=tgt?tgt.symbol:state.selections[id];const nm=tgt?tgt.name:nameOf(id);if(!sym)return;if(id==="tablechart"&&$("chartModal").hidden)return;
+ const my=r.seq=(r.seq||0)+1,alive=()=>r.seq===my;const tc=id==="tablechart";
  status(id,"loading","Loading "+nm+"…");
- try{const TV=await loadTV();box.replaceChildren();const tc=id==="tablechart";new TV.widget({autosize:true,symbol:sym,interval:tc?"D":state.interval,timezone:"Europe/Zurich",theme:state.theme,style:"1",locale:"en",hide_side_toolbar:true,
-  allow_symbol_change:id==="markets"||tc,studies:tc?studies("ma"):studies(),container_id:"chart_"+id,support_host:"https://www.tradingview.com"});setTimeout(()=>status(id,"ready"),1600);}
- catch(e){status(id,"err",e.message);}}
+ if(own(id,sym))return drawOwn(id,box,sym,nm,tc?"D":state.interval,tc?"ma":state.studies,alive);
+ try{const TV=await loadTV();if(!alive())return;box.replaceChildren();new TV.widget({autosize:true,symbol:sym,interval:tc?"D":state.interval,timezone:"Europe/Zurich",theme:state.theme,style:"1",locale:"en",hide_side_toolbar:true,
+  allow_symbol_change:id==="markets"||tc,studies:tc?studies("ma"):studies(),container_id:"chart_"+id,support_host:"https://www.tradingview.com"});setTimeout(()=>alive()&&status(id,"ready"),1600);}
+ catch(e){if(alive())status(id,"err",e.message);}}
 
 /* ---------- panels ---------- */
 function fillSelect(id){const sel=$("select_"+id);if(!sel)return;sel.replaceChildren();const p=PANELS.find(x=>x.id===id);
@@ -140,7 +152,9 @@ function fillSelect(id){const sel=$("select_"+id);if(!sel)return;sel.replaceChil
  if(cus.length){const g=document.createElement("optgroup");g.label=p.search?"Recent":"Added";cus.forEach(([n,s])=>g.append(new Option(n,s,false,s===state.selections[id])));sel.append(g);}
  if(!opts(id).some(o=>o[1]===state.selections[id]))sel.add(new Option(nameOf(id),state.selections[id],true,true));}
 function syncHead(id){$("title_"+id).textContent=nameOf(id);$("meta_"+id).textContent=state.selections[id];const sel=$("select_"+id);if(sel)sel.value=state.selections[id];
- if(id==="markets")document.querySelectorAll("#chips_markets .chip").forEach(c=>c.classList.toggle("is-on",c.dataset.symbol===state.selections.markets));}
+ const pb=$("pxBtn_"+id);if(pb){const emb=!PX||PX.embeddable(state.selections[id]);const on=!emb||state.simple;pb.disabled=!emb;pb.classList.toggle("is-on",on);pb.setAttribute("aria-pressed",on);
+  pb.title=emb?(on?"Showing our own price chart; click for the TradingView chart":"Draw our own price chart instead of the TradingView widget"):"TradingView doesn't embed this exchange, so our own price chart is shown";}
+ if(id==="markets")document.querySelectorAll("#chips_markets .chip[data-symbol]").forEach(c=>c.classList.toggle("is-on",c.dataset.symbol===state.selections.markets));}
 function build(){const add=$("addPanelSelect");add.replaceChildren();const f=document.createDocumentFragment();
  PANELS.forEach(cfg=>{add.add(new Option(cfg.label,cfg.id));const p=document.createElement("section");p.className="panel panel-"+cfg.id;p.id="panel_"+cfg.id;p.dataset.panelId=cfg.id;
   p.innerHTML='<div class="panel-head"><div class="panel-id"><span class="panel-label"></span><strong class="panel-title" id="title_'+cfg.id+'"></strong><div class="panel-meta" id="meta_'+cfg.id+'"></div></div><div class="panel-controls"></div></div>'
@@ -153,7 +167,9 @@ function build(){const add=$("addPanelSelect");add.replaceChildren();const f=doc
 function choose(id,item){const s=item.symbol.trim().toUpperCase();if(!s)return;
  if(!opts(id).some(o=>o[1]===s)){state.custom[id]=[[item.name||s,s]].concat((state.custom[id]||[]).filter(x=>x[1]!==s)).slice(0,MAX_RECENT);}
  state.selections[id]=s;save();fillSelect(id);syncHead(id);render(id,true);}
-function chips(){const box=$("chips_markets");if(!box)return;box.replaceChildren();HOT.forEach(([name,symbol])=>{const b=document.createElement("button");b.type="button";b.className="chip"+(symbol===state.selections.markets?" is-on":"");b.dataset.symbol=symbol;b.textContent=name;b.title=symbol;b.onclick=()=>choose("markets",{name,symbol});box.append(b);});}
+function chips(){const box=$("chips_markets");if(!box)return;box.replaceChildren();
+ const t=document.createElement("button");t.type="button";t.className="chip px-toggle";t.id="pxBtn_markets";t.textContent="Simple chart";
+ t.onclick=()=>{if(t.disabled)return;state.simple=!state.simple;save();syncHead("markets");render("markets",true);};box.append(t);HOT.forEach(([name,symbol])=>{const b=document.createElement("button");b.type="button";b.className="chip"+(symbol===state.selections.markets?" is-on":"");b.dataset.symbol=symbol;b.textContent=name;b.title=symbol;b.onclick=()=>choose("markets",{name,symbol});box.append(b);});syncHead("markets");}
 
 /* ---------- type-ahead search (static symbol index; TradingView remote lookup when reachable) ---------- */
 const fold=s=>String(s).toLowerCase().replace(/ø/g,"o").replace(/æ/g,"ae").normalize("NFD").replace(/[\u0300-\u036f]/g,"");
@@ -203,8 +219,9 @@ $("addConfirmButton").onclick=()=>{const id=$("addPanelSelect").value,n=$("addNa
 $("prevPanelButton").onclick=()=>{state.phoneIndex--;save();phone();};
 $("nextPanelButton").onclick=()=>{state.phoneIndex++;save();phone();};
 window.addEventListener("resize",phone);
-window.MM={setPage,embed(id,symbol){/* small read-only chart for the company panel */
+window.MM={setPage,selfDrawn:sym=>!!PX&&!PX.embeddable(sym),embed(id,symbol,name){/* small read-only chart for the company panel */
+ if(PX&&!PX.embeddable(symbol))return PX.load(symbol,"D").then(data=>{const box=$(id);if(!box)throw Error("gone");PX.paint(box,data,{symbol,name:name||symbol,interval:"D",studies:"ma",compact:true});});
  return loadTV().then(TV=>{const box=$(id);if(!box)throw Error("gone");box.replaceChildren();new TV.widget({autosize:true,symbol,interval:"D",range:"12M",timezone:"Europe/Zurich",theme:state.theme,style:"3",locale:"en",
   hide_top_toolbar:true,hide_side_toolbar:true,hide_legend:false,allow_symbol_change:false,save_image:false,withdateranges:false,details:false,container_id:id,support_host:"https://www.tradingview.com"});});},
- openChart(name,symbol){state.tableChart={name,symbol};save();render("tablechart",true);},clearChart(){state.tableChart={name:"",symbol:""};save();const b=$("chart_tablechart");b&&b.replaceChildren();status("tablechart","ready");}};
+ openChart(name,symbol){state.tableChart={name,symbol};save();render("tablechart",true);},clearChart(){state.tableChart={name:"",symbol:""};save();const b=$("chart_tablechart");PX&&PX.clear(b);b&&b.replaceChildren();status("tablechart","ready");}};
 build();apply();clocks();lazy();loadSymbolIndex();

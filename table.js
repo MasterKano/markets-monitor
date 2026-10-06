@@ -167,7 +167,7 @@ function openChart(r){const m=$("chartModal");const y=noWidget(r);$("cmTitle").t
  $("cmFallback").innerHTML='<div class="fallback-head">'+(y?"1Y daily closes (Yahoo, %). Treasury yields can't be embedded from TradingView; use TradingView ↗ for the interactive chart.":"1Y daily closes (Yahoo) — shown when the TradingView widget is unavailable for this symbol")+'</div>'+bigChart(r);
  m.hidden=false;document.body.classList.add("modal-open");$("cmClose").focus();
  const fb=$("cmFallback"),sb=$("cmSimple");
- if(r.tv&&!y&&window.MM&&window.MM.openChart){fb.hidden=true;sb.classList.remove("is-on");sb.disabled=false;sb.title="Toggle a simple 1Y line from the table data";window.MM.openChart(r.name,r.tv);setTimeout(()=>{if(!window.TradingView)fb.hidden=false;},5000);}
+ if(r.tv&&!y&&window.MM&&window.MM.openChart){fb.hidden=true;sb.classList.remove("is-on");sb.disabled=false;sb.title="Toggle a simple 1Y line from the table data";window.MM.openChart(r.name,r.tv);if(!(window.MM.selfDrawn&&window.MM.selfDrawn(r.tv)))setTimeout(()=>{if(!window.TradingView)fb.hidden=false;},5000);}
  else{fb.hidden=false;sb.classList.add("is-on");sb.disabled=true;sb.title=y?"Yields show the Yahoo 1Y line (no embeddable TradingView chart)":"No TradingView mapping: Yahoo 1Y line only";window.MM&&window.MM.clearChart&&window.MM.clearChart();const s=$("status_tablechart");if(s)s.hidden=true;$("chart_tablechart").replaceChildren();}}
 function closeChart(){$("chartModal").hidden=true;document.body.classList.remove("modal-open");$("chart_tablechart").replaceChildren();}
 

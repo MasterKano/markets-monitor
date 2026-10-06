@@ -56,3 +56,19 @@ body[data-page=monitor] .connection{display:none}
  #themeButton::before{content:"◐";font-size:16px}#refreshButton::before{content:"↻";font-size:17px}
  .chart-tools .field{flex:1 1 100%;justify-content:space-between}.chart-tools select{flex:1;max-width:62%}
 }
+/* own price chart (pxchart.js) for exchanges TradingView won't embed */
+.px-chart{position:absolute;inset:0;display:flex;flex-direction:column;padding:8px 6px 6px 12px;background:var(--panel);color:var(--text);font-size:11.5px}
+.px-legend{display:flex;flex-wrap:wrap;align-items:baseline;gap:3px 10px;min-height:18px;line-height:1.35;font-variant-numeric:tabular-nums}
+.px-name{font-weight:700}.px-px{font-weight:700}.px-px small{color:var(--muted);font-size:10px;font-weight:600}.px-date{color:var(--faint)}
+.px-legend .up,.px-sum.up{color:var(--good)}.px-legend .dn,.px-sum.dn{color:var(--bad)}
+.px-ma{color:var(--c);white-space:nowrap}.px-sum{font-size:10.5px;font-variant-numeric:tabular-nums}
+.px-plot{position:relative;flex:1;min-height:0;margin-top:4px;touch-action:pan-y}.px-svg{position:absolute;left:0;top:0;display:block;cursor:crosshair}
+.px-grid{stroke:var(--border);stroke-width:1;opacity:.6}.px-ax{fill:var(--faint);font-size:10px;font-variant-numeric:tabular-nums}
+.px-line{fill:none;stroke-width:1.7;stroke-linejoin:round}.px-maline{fill:none;stroke-width:1.2;opacity:.9}.px-lastline{stroke-width:1;stroke-dasharray:2 3;opacity:.7}
+.px-tag{fill:#fff;font-size:10px;font-weight:700;font-variant-numeric:tabular-nums}.px-vol{opacity:.28}.px-cross{stroke:var(--muted);stroke-width:1;stroke-dasharray:3 3}
+.px-foot{display:flex;flex-wrap:wrap;justify-content:space-between;gap:2px 10px;margin-top:3px;color:var(--faint);font-size:10px}
+.px-links{display:inline-flex;gap:10px}.px-links a{color:var(--accent);text-decoration:none}.px-links a:hover{text-decoration:underline}
+.px-chart.is-compact{padding:6px 4px 4px 10px;background:var(--panel-deep)}.px-chart.is-compact .px-name{display:none}
+.px-msg{position:absolute;inset:0;display:grid;place-content:center;gap:6px;padding:20px;text-align:center;color:var(--muted);font-size:12.5px;background:var(--panel)}
+.px-msg strong{color:var(--text);font-size:14px}.px-msg p{margin:0;max-width:440px}.px-msg .px-links{justify-content:center;margin-top:6px}.px-msg .px-links a.button{color:var(--text)}
+.chip.px-toggle{position:sticky;left:0;z-index:1;margin-right:4px;background:var(--panel-deep);box-shadow:-14px 0 0 var(--panel-deep),6px 0 8px -4px var(--panel-deep)}.chip.px-toggle.is-on{color:var(--text);background:color-mix(in srgb,var(--accent) 18%,var(--panel-deep));border-color:var(--accent)}.chip.px-toggle:disabled{cursor:default;opacity:1}

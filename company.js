@@ -81,7 +81,7 @@ function drawChart(r){const box=$("coChart");if(!box)return;const tv=r&&r.tv;if(
  document.querySelectorAll("#coChartSec [data-chart]").forEach(b=>{const on=b.dataset.chart===chartMode;b.classList.toggle("is-on",on);b.setAttribute("aria-pressed",on);});
  if(chartMode==="line"||!window.MM||!window.MM.embed){box.innerHTML=lineChart(r);return;}
  box.innerHTML='<div class="co-tv" id="coTv"></div><div class="co-chart-status" id="coTvStatus">Loading chart…</div>';const want=cur;
- window.MM.embed("coTv",tv).then(()=>{const s=$("coTvStatus");setTimeout(()=>s&&s.remove(),1200);}).catch(()=>{if(cur===want&&chartMode==="tv"){box.innerHTML=lineChart(r)+'<p class="co-fine">Interactive chart unavailable (TradingView blocked or offline); showing the 1Y line from Yahoo closes.</p>';}});}
+ window.MM.embed("coTv",tv,r&&r.name).then(()=>{const s=$("coTvStatus");setTimeout(()=>s&&s.remove(),1200);}).catch(()=>{if(cur===want&&chartMode==="tv"){box.innerHTML=lineChart(r)+'<p class="co-fine">Interactive chart unavailable ('+(window.MM.selfDrawn&&window.MM.selfDrawn(tv)?"TradingView doesn't embed this exchange and the backup price feed failed":"TradingView blocked or offline")+'); showing the 1Y line from Yahoo closes.</p>';}});}
 
 function tile(l,v,sub,tip){return'<div class="co-tile"'+(tip?' title="'+esc(tip)+'"':"")+'><span class="co-tl">'+esc(l)+'</span><span class="co-tv-val">'+v+'</span>'+(sub?'<span class="co-ts">'+sub+'</span>':"")+'</div>';}
 function valuation(c,r){let v=c&&c.val;if(!v)return sec("coVal","Valuation",empty("No valuation data from Yahoo for this name."));
