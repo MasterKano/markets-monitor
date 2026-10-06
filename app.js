@@ -204,5 +204,8 @@ $("prevPanelButton").onclick=()=>{state.phoneIndex--;save();phone();};
 $("nextPanelButton").onclick=()=>{state.phoneIndex++;save();phone();};
 $("pageTable").onclick=()=>setPage("table");$("pageMonitor").onclick=()=>setPage("monitor");
 window.addEventListener("resize",phone);
-window.MM={openChart(name,symbol){state.tableChart={name,symbol};save();render("tablechart",true);},clearChart(){state.tableChart={name:"",symbol:""};save();const b=$("chart_tablechart");b&&b.replaceChildren();status("tablechart","ready");}};
+window.MM={embed(id,symbol){/* small read-only chart for the company panel */
+ return loadTV().then(TV=>{const box=$(id);if(!box)throw Error("gone");box.replaceChildren();new TV.widget({autosize:true,symbol,interval:"D",range:"12M",timezone:"Europe/Zurich",theme:state.theme,style:"3",locale:"en",
+  hide_top_toolbar:true,hide_side_toolbar:true,hide_legend:false,allow_symbol_change:false,save_image:false,withdateranges:false,details:false,container_id:id,support_host:"https://www.tradingview.com"});});},
+ openChart(name,symbol){state.tableChart={name,symbol};save();render("tablechart",true);},clearChart(){state.tableChart={name:"",symbol:""};save();const b=$("chart_tablechart");b&&b.replaceChildren();status("tablechart","ready");}};
 build();apply();clocks();lazy();loadSymbolIndex();
