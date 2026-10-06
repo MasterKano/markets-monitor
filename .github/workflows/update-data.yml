@@ -1,4 +1,6 @@
 name: Update market data
+# Mode shown in the run title (a box-side trigger dispatches with an explicit mode and reads it back to avoid duplicates)
+run-name: "Update market data (${{ inputs.mode || ((startsWith(github.event.schedule, '30 12') || github.event.schedule == '30 17 * * *') && 'power') || (github.event.schedule == '0 21 * * 1-5' && 'market') || 'full' }})"
 
 on:
   schedule:
@@ -15,6 +17,12 @@ on:
     - cron: "30 12 * * 0,6"
     - cron: "30 17 * * *"
   workflow_dispatch:
+    inputs:
+      mode:
+        description: "full = everything (05:30 run) · market = markets/companies/news/symbols, no power (21:00 run) · power = Nordic power only (12:30/17:30 runs)"
+        type: choice
+        options: [full, market, power]
+        default: full
 
 permissions:
   contents: write
@@ -27,6 +35,9 @@ jobs:
   build:
     runs-on: ubuntu-latest
     timeout-minutes: 25
+    env:
+      # same mapping as run-name: schedule -> mode; manual runs pick it via the input
+      MODE: ${{ inputs.mode || ((startsWith(github.event.schedule, '30 12') || github.event.schedule == '30 17 * * *') && 'power') || (github.event.schedule == '0 21 * * 1-5' && 'market') || 'full' }}
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-python@v6
@@ -37,22 +48,22 @@ jobs:
       - name: Install
         run: pip install -r scripts/requirements.txt
       - name: Market data (Yahoo)
-        if: ${{ !startsWith(github.event.schedule, '30 12') && github.event.schedule != '30 17 * * *' }}
+        if: env.MODE != 'power'
         run: python scripts/build_data.py
       - name: Company fundamentals (Yahoo, company panel)
         # ~1-2 min; morning + evening builds only (not the 12:30 power-only run)
-        if: ${{ !startsWith(github.event.schedule, '30 12') && github.event.schedule != '30 17 * * *' }}
+        if: env.MODE != 'power'
         run: python scripts/build_companies.py
         timeout-minutes: 8
         continue-on-error: true
       - name: News
-        if: ${{ !startsWith(github.event.schedule, '30 12') && github.event.schedule != '30 17 * * *' }}
+        if: env.MODE != 'power'
         run: python scripts/build_news.py
         continue-on-error: true
       - name: Nordic power (ENTSO-E, EEX CSV, day-ahead, hydro)
         # ENTSO-E is the primary day-ahead source (~1-2 min); Energy-Charts (~2 req/min) only fills failed zones.
         # Skipped at 21:00.
-        if: github.event.schedule != '0 21 * * 1-5'
+        if: env.MODE != 'market'
         run: python scripts/build_power.py
         env:
           # ENTSO-E Transparency: day-ahead prices, SE4 wind/load/flows/outages, reservoirs (skipped when unset)
@@ -60,7 +71,7 @@ jobs:
         timeout-minutes: 15
         continue-on-error: true
       - name: Symbol search index (Markets autofill)
-        if: ${{ !startsWith(github.event.schedule, '30 12') && github.event.schedule != '30 17 * * *' }}
+        if: env.MODE != 'power'
         run: python scripts/build_symbols.py
         continue-on-error: true
       - name: Commit data back to this branch
