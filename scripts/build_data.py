@@ -8,6 +8,9 @@ distances and a 1-year sparkline. Real data only: anything missing is written as
 (shown as n/a on the page) and listed in "errors".
 
 Usage: python scripts/build_data.py [--out data/market.json] [--only SYM,SYM]
+       python scripts/build_data.py --intraday --out live/market.json
+  --intraday: prices only (no quoteSummary fundamentals). Mkt cap / EV are scaled from the last full build
+  (data/market.json) by the price change, converted at fresh FX. Used by .github/workflows/intraday.yml.
 """
 import argparse, datetime as dt, json, math, os, random, sys, time
 from zoneinfo import ZoneInfo
@@ -97,6 +100,19 @@ def fetch_yf(sym, years=10):
     return df, meta
 
 
+def session_state(meta, now_ts=None):
+    """'open' / 'pre' / 'post' / 'closed' from the chart meta's currentTradingPeriod at fetch time."""
+    now_ts = now_ts or time.time()
+    try:
+        p = meta["currentTradingPeriod"]
+        for k, lab in (("regular", "open"), ("pre", "pre"), ("post", "post")):
+            if p[k]["start"] <= now_ts < p[k]["end"]:
+                return lab
+        return "closed"
+    except Exception:
+        return None
+
+
 def fill_last_close(df, meta):
     """Yahoo quirk: the chart API often leaves the latest daily close blank (NaN) for Nordic/LSE tickers while
     meta.regularMarketPrice already holds that session's price. Fill (or append) the bar for the quote's
@@ -118,6 +134,13 @@ def fill_last_close(df, meta):
     if pos:
         p = pos[-1]
         c = df.iloc[p, df.columns.get_loc("close")]
+        if session_state(meta) == "open":
+            # session in progress: the quote is the latest print; the daily bar can lag it
+            df.iloc[p, df.columns.get_loc("close")] = px
+            v, qv = df.iloc[p, df.columns.get_loc("volume")], meta.get("regularMarketVolume")
+            if qv and (v is None or pd.isna(v) or float(qv) > v):
+                df.iloc[p, df.columns.get_loc("volume")] = float(qv)
+            return df, bool(c is None or pd.isna(c))
         if c is None or pd.isna(c):
             df.iloc[p, df.columns.get_loc("close")] = px
             v = df.iloc[p, df.columns.get_loc("volume")]
@@ -438,10 +461,19 @@ def analyse(spec, df, meta, src, now, fund=None, fx_table=None):
         out["partial"] = bool(reg["start"] <= now.timestamp() < reg["end"]) and last_date.date() == today_ex
     except Exception:
         out["partial"] = None
+    out["state"] = session_state(meta, now.timestamp())   # open / pre / post / closed at fetch time
     out["market_time"] = (dt.datetime.fromtimestamp(meta["regularMarketTime"], UTC).isoformat()
                           if meta.get("regularMarketTime") else None)
     out["px"] = rnd(px, 6)
     prev = float(c.iloc[-2]) if len(c) >= 2 else None
+    # equities/ETFs: previous close per Yahoo's quote (regularMarketChangePercent) guards against a blank prior
+    # daily bar (Nordic/LSE quirk). FX/futures keep the daily-bar previous close (Yahoo's quote uses other cut-offs).
+    rmp, rcp = meta.get("regularMarketPrice"), meta.get("regularMarketChangePercent")
+    if spec.get("kind", "equity") in ("equity", "etf") and isinstance(rmp, (int, float)) and isinstance(rcp, (int, float)) and rcp > -100 and abs(px - rmp) <= 1e-6 * abs(rmp):
+        q_prev = rmp / (1 + rcp / 100)
+        if prev is None or abs(q_prev / prev - 1) > 0.002:
+            prev = q_prev
+    out["prev_close"] = rnd(prev, 6)
     out["chg"] = rnd(px - prev, 6) if prev else None
     pct = {"1D": rnd((px / prev - 1) * 100, 3) if prev else None}
     for key, off in HORIZONS:
@@ -534,6 +566,7 @@ def main():
     ap.add_argument("--out", default=os.path.join(ROOT, "data", "market.json"))
     ap.add_argument("--only", default="")
     ap.add_argument("--sleep", type=float, default=0.35)
+    ap.add_argument("--intraday", action="store_true", help="prices only; scale mcap/EV from data/market.json")
     a = ap.parse_args()
     only = {x.strip() for x in a.only.split(",") if x.strip()}
     now = dt.datetime.now(UTC)
@@ -563,11 +596,20 @@ def main():
         log(f"Only {len(cache)}/{len(syms)} symbols fetched - not overwriting {a.out}")
         return 2
 
-    # Fundamentals (mcap / EV) for equities & ETFs
-    crumb = yahoo_crumb(SESSION)
+    # Fundamentals (mcap / EV) for equities & ETFs (intraday: reuse the last full build instead)
+    base_rows, base_meta = {}, {}
+    if a.intraday:
+        try:
+            with open(os.path.join(ROOT, "data", "market.json")) as f:
+                base = json.load(f)
+            base_meta = dict(utc=base.get("fundamentals_utc") or base.get("generated_utc"))
+            base_rows = {r["sym"]: r for g in base["groups"] for sec in g["sections"] for r in sec["rows"]}
+        except Exception as e:
+            log(f"intraday: no base market.json ({e})")
+    crumb = None if a.intraday else yahoo_crumb(SESSION)
     funds = {}
     fund_kinds = {"equity", "etf"}
-    fund_syms = [s for s in syms if specs[s].get("kind", "equity") in fund_kinds and s in cache]
+    fund_syms = [s for s in syms if specs[s].get("kind", "equity") in fund_kinds and s in cache and not a.intraday]
     for i, sym in enumerate(fund_syms):
         try:
             mcap, ev, ccy, fccy = fetch_fundamentals(sym, crumb)
@@ -585,7 +627,7 @@ def main():
         time.sleep(a.sleep * 0.5 + random.uniform(0, 0.15))
 
     # FX -> EUR (Yahoo, ECB mid fallback)
-    needed = set()
+    needed = {MAJOR.get(r.get("mcap_ccy"), r.get("mcap_ccy")) for r in base_rows.values() if r.get("mcap_ccy")}
     for sym, trip in funds.items():
         ccy = trip[2] or (cache[sym][1] or {}).get("currency")
         for c in (ccy, trip[3]):
@@ -611,10 +653,24 @@ def main():
                     df, meta, src = cache[spec["sym"]]
                     try:
                         row = analyse(spec, df, meta, src, now, fund=funds.get(spec['sym']), fx_table=fx_table)
+                        b = base_rows.get(spec["sym"]) or {}
+                        if a.intraday and b.get("px") and row.get("px") and b.get("ccy") == row.get("ccy"):
+                            # mcap scales with price; EV = mcap + (unchanged) net debt
+                            k = row["px"] / b["px"]
+                            for f in ("mcap_ccy", "ev_src"):
+                                row[f] = b.get(f)
+                            if b.get("mcap") is not None:
+                                row["mcap"] = sig(b["mcap"] * k, 6)
+                                row["mcap_eur"] = to_eur(row["mcap"], row["mcap_ccy"], fx_table)
+                                if b.get("ev") is not None:
+                                    row["ev"] = sig(b["ev"] + b["mcap"] * (k - 1), 6)
+                                    row["ev_eur"] = to_eur(row["ev"], row["mcap_ccy"], fx_table)
                     except Exception as e:
                         row = dict(sym=spec["sym"], name=spec["name"], tv=spec.get("tv"), kind=spec.get("kind"),
                                    note=spec.get("note"), error=f"analysis failed: {e}"[:200])
                         errors.append(dict(sym=spec["sym"], error=row["error"]))
+                elif a.intraday and spec["sym"] in base_rows and not base_rows[spec["sym"]].get("error"):
+                    row = dict(base_rows[spec["sym"]], stale=True)   # keep the last full-build values
                 else:
                     err = next((e["error"] for e in errors if e["sym"] == spec["sym"]), "not fetched")
                     row = dict(sym=spec["sym"], name=spec["name"], tv=spec.get("tv"), kind=spec.get("kind"),
@@ -627,6 +683,8 @@ def main():
     out = dict(
         generated_utc=now.isoformat(timespec="seconds"),
         generated_geneva=now.astimezone(GENEVA).isoformat(timespec="seconds"),
+        mode="intraday" if a.intraday else "full",
+        fundamentals_utc=base_meta.get("utc") if a.intraday else now.isoformat(timespec="seconds"),
         source="Yahoo Finance daily bars (chart API; yfinance fallback). Price returns, not total return. Market cap / EV from Yahoo quoteSummary, converted to EUR.",
         method=dict(
             returns="Last close vs last close on/before the same calendar date N periods earlier; YTD vs prior year-end close; n/a if history is shorter.",
@@ -635,7 +693,7 @@ def main():
             futures="Continuous front-month futures: long-horizon returns (esp. 10Y) include roll effects.",
             mcap_ev="Yahoo marketCap. Equity EV = market cap + net debt (latest total debt minus cash & short-term investments) + minority interest, reporting-currency balance sheet converted at current FX (same as the company panel); Yahoo enterpriseValue only when components are missing (and for ETFs). Converted to EUR via Yahoo EUR{CCY}=X (ECB SDW mid fallback). GBp treated as GBP.",
             last_close="When Yahoo's chart API leaves the latest daily close blank (common for Nordic/LSE tickers), the quote's regularMarketPrice for that session is used (last_from_quote).",
-            prices="Yahoo quotes are typically delayed ~15 minutes on non-US venues (not live).",
+            prices="Latest price = Yahoo quote (regularMarketPrice / regularMarketTime; typically ~15 min delayed, not live); 1D vs the previous session's close. While a session is open the latest daily bar (and its volume) is today so far.",
         ),
         fx_eur=fx_table,
         fx_asof=fx_asof[-1] if fx_asof else None,
