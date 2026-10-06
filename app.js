@@ -124,14 +124,14 @@ const runtime=Object.fromEntries(PANELS.map(p=>[p.id,{vis:false,done:false}]));r
 function save(){try{localStorage.setItem(KEY,JSON.stringify(state));}catch(e){}}
 function opts(id){return PANELS.find(p=>p.id===id).options.concat(state.custom[id]||[]);}
 function nameOf(id){const s=state.selections[id];const m=opts(id).find(o=>o[1]===s)||(INDEX.find(x=>x.symbol===s)||LOCAL.find(x=>x.symbol===s)||{}).name;return Array.isArray(m)?m[0]:(m||s);}
-function studies(){const a=[];if(state.studies.includes("ma"))a.push({id:"MASimple@tv-basicstudies",inputs:{length:50}},{id:"MASimple@tv-basicstudies",inputs:{length:100}},{id:"MASimple@tv-basicstudies",inputs:{length:200}});if(state.studies.includes("vol"))a.push({id:"Volume@tv-basicstudies"});if(state.studies.includes("rsi"))a.push({id:"RSI@tv-basicstudies",inputs:{length:14}});return a;}
+function studies(k=state.studies){const a=[];if(k.includes("ma"))a.push({id:"MASimple@tv-basicstudies",inputs:{length:50}},{id:"MASimple@tv-basicstudies",inputs:{length:100}},{id:"MASimple@tv-basicstudies",inputs:{length:200}});if(k.includes("vol"))a.push({id:"Volume@tv-basicstudies"});if(k.includes("rsi"))a.push({id:"RSI@tv-basicstudies",inputs:{length:14}});return a;}
 function loadTV(){if(window.TradingView)return Promise.resolve(window.TradingView);if(tvP)return tvP;tvP=new Promise((res,rej)=>{const s=document.createElement("script");s.src="https://s3.tradingview.com/tv.js";s.async=true;s.onload=()=>window.TradingView?res(window.TradingView):rej(Error("TradingView did not initialise"));s.onerror=()=>{tvP=null;rej(Error("TradingView script blocked or offline"));};document.head.append(s);});return tvP;}
 function status(id,mode,msg){const el=$("status_"+id);if(!el)return;if(mode==="ready"){el.hidden=true;el.replaceChildren();return;}el.hidden=false;el.textContent=msg||"";}
 async function render(id,force){const r=runtime[id];if(!r)return;if(!force&&!r.vis&&!r.done)return;r.done=true;const box=$("chart_"+id);if(!box)return;box.replaceChildren();
  const tgt=id==="tablechart"?state.tableChart:null;const sym=tgt?tgt.symbol:state.selections[id];const nm=tgt?tgt.name:nameOf(id);if(!sym)return;if(id==="tablechart"&&$("chartModal").hidden)return;
  status(id,"loading","Loading "+nm+"…");
- try{const TV=await loadTV();box.replaceChildren();new TV.widget({autosize:true,symbol:sym,interval:state.interval,timezone:"Europe/Zurich",theme:state.theme,style:"1",locale:"en",hide_side_toolbar:true,
-  allow_symbol_change:id==="markets"||id==="tablechart",studies:studies(),container_id:"chart_"+id,support_host:"https://www.tradingview.com"});setTimeout(()=>status(id,"ready"),1600);}
+ try{const TV=await loadTV();box.replaceChildren();const tc=id==="tablechart";new TV.widget({autosize:true,symbol:sym,interval:tc?"D":state.interval,timezone:"Europe/Zurich",theme:state.theme,style:"1",locale:"en",hide_side_toolbar:true,
+  allow_symbol_change:id==="markets"||tc,studies:tc?studies("ma"):studies(),container_id:"chart_"+id,support_host:"https://www.tradingview.com"});setTimeout(()=>status(id,"ready"),1600);}
  catch(e){status(id,"err",e.message);}}
 
 /* ---------- panels ---------- */
@@ -185,7 +185,7 @@ function wireSearch(id){const inp=$("search_"+id),box=$("suggest_"+id);if(!inp)r
 
 /* ---------- page, layout, phone ---------- */
 function phone(){const on=matchMedia("(max-width:760px)").matches&&state.page==="monitor";document.body.classList.toggle("is-phone-focus",on);if(!on)return;state.phoneIndex=((state.phoneIndex%PANELS.length)+PANELS.length)%PANELS.length;PANELS.forEach((p,i)=>$("panel_"+p.id).classList.toggle("is-phone-active",i===state.phoneIndex));$("mobilePanelLabel").textContent=PANELS[state.phoneIndex].label;const id=PANELS[state.phoneIndex].id;runtime[id].vis=true;render(id,true);}
-function setPage(pg){state.page=pg;save();document.body.dataset.page=pg;["table","monitor"].forEach(k=>{const on=pg===k;$(k+"Page").classList.toggle("is-on",on);const b=$("page"+k[0].toUpperCase()+k.slice(1));b.classList.toggle("is-on",on);b.setAttribute("aria-pressed",on);});
+function setPage(pg){if(pg!=="table"&&pg!=="monitor")pg="table";state.page=pg;save();document.body.dataset.page=pg;["table","monitor"].forEach(k=>$(k+"Page").classList.toggle("is-on",pg===k));
  if(pg!=="table"&&!$("chartModal").hidden)$("cmClose").click();phone();}
 function apply(){$("intervalSelect").value=state.interval;$("studiesSelect").value=state.studies;dash.classList.toggle("is-stacked",state.layout==="stack");document.documentElement.dataset.theme=state.theme;$("themeButton").textContent=state.theme==="dark"?"Light":"Dark";$("layoutButton").textContent=state.layout==="stack"?"Grid view":"Stack view";setPage(state.page);}
 function lazy(){if(!("IntersectionObserver"in window)){PANELS.forEach(p=>{runtime[p.id].vis=true;render(p.id,true);});return;}const io=new IntersectionObserver(es=>es.forEach(e=>{const id=e.target.dataset.panelId;runtime[id].vis=e.isIntersecting;if(e.isIntersecting)render(id,false);}),{rootMargin:"240px"});PANELS.forEach(p=>io.observe($("panel_"+p.id)));}
@@ -202,9 +202,8 @@ $("addSymbolButton").onclick=()=>$("addBar").classList.toggle("is-open");
 $("addConfirmButton").onclick=()=>{const id=$("addPanelSelect").value,n=$("addNameInput").value.trim(),s=$("addSymbolInput").value.trim().toUpperCase();if(!n||!s)return;state.custom[id]=(state.custom[id]||[]).filter(x=>x[1]!==s);state.custom[id].push([n,s]);state.selections[id]=s;save();fillSelect(id);syncHead(id);render(id,true);};
 $("prevPanelButton").onclick=()=>{state.phoneIndex--;save();phone();};
 $("nextPanelButton").onclick=()=>{state.phoneIndex++;save();phone();};
-$("pageTable").onclick=()=>setPage("table");$("pageMonitor").onclick=()=>setPage("monitor");
 window.addEventListener("resize",phone);
-window.MM={embed(id,symbol){/* small read-only chart for the company panel */
+window.MM={setPage,embed(id,symbol){/* small read-only chart for the company panel */
  return loadTV().then(TV=>{const box=$(id);if(!box)throw Error("gone");box.replaceChildren();new TV.widget({autosize:true,symbol,interval:"D",range:"12M",timezone:"Europe/Zurich",theme:state.theme,style:"3",locale:"en",
   hide_top_toolbar:true,hide_side_toolbar:true,hide_legend:false,allow_symbol_change:false,save_image:false,withdateranges:false,details:false,container_id:id,support_host:"https://www.tradingview.com"});});},
  openChart(name,symbol){state.tableChart={name,symbol};save();render("tablechart",true);},clearChart(){state.tableChart={name:"",symbol:""};save();const b=$("chart_tablechart");b&&b.replaceChildren();status("tablechart","ready");}};

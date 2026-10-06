@@ -7,9 +7,9 @@
 <title>Markets Monitor</title>
 <meta name="description" content="Markets Monitor: daily cross-asset dashboard for Nordic renewables, energy, mining, commodities, indices, rates and FX.">
 <link rel="icon" href="data:,">
-<link rel="stylesheet" href="styles.css">
-<link rel="stylesheet" href="table.css">
-<link rel="stylesheet" href="power.css?v=20261006c">
+<link rel="stylesheet" href="styles.css?v=20261006d">
+<link rel="stylesheet" href="table.css?v=20261006d">
+<link rel="stylesheet" href="power.css?v=20261006d">
 <link rel="stylesheet" href="company.css?v=20261006b">
 </head>
 <body>
@@ -25,27 +25,32 @@
     </div>
   </header>
   <div class="toolbar">
-    <button class="button is-on" id="pageTable" type="button" aria-pressed="true">Table</button>
-    <button class="button" id="pageMonitor" type="button" aria-pressed="false">Monitor</button>
-    <label class="field" for="intervalSelect" title="Sets the interval on all four charts"><span class="field-label">All charts</span>
-      <select id="intervalSelect">
-        <option value="60">1 hour</option><option value="240">4 hour</option>
-        <option value="D" selected>Daily</option><option value="W">Weekly</option><option value="M">Monthly</option>
-      </select>
-    </label>
-    <label class="field" for="studiesSelect"><span class="field-label">Studies</span>
-      <select id="studiesSelect">
-        <option value="none">None</option><option value="ma" selected>50 / 100 / 200 MA</option>
-        <option value="vol">Volume</option><option value="rsi">RSI 14</option>
-        <option value="ma-vol">MA + Volume</option><option value="ma-rsi">MA + RSI</option>
-      </select>
-    </label>
-    <button class="button layout-button" id="layoutButton" type="button">Stack view</button>
-    <button class="button" id="addSymbolButton" type="button">Add symbol</button>
-    <button class="button" id="themeButton" type="button">Light</button>
-    <button class="button" id="refreshButton" type="button">Refresh</button>
-    <button class="button" id="resetButton" type="button">Reset</button>
+    <nav class="main-nav" id="mainNav" role="tablist" aria-label="Sections">
+      <button class="main-tab is-on" type="button" role="tab" data-v="equities" aria-selected="true">Equities</button>
+      <button class="main-tab" type="button" role="tab" data-v="macro" aria-selected="false">Macro</button>
+      <button class="main-tab" type="button" role="tab" data-v="power" aria-selected="false">Power</button>
+      <button class="main-tab" type="button" role="tab" data-v="charts" aria-selected="false">Charts</button>
+    </nav>
     <span class="toolbar-spacer"></span>
+    <div class="chart-tools" id="chartTools">
+      <label class="field" for="intervalSelect" title="Sets the timeframe on all four charts"><span class="field-label">Timeframe<small class="field-hint">applies to all 4 charts</small></span>
+        <select id="intervalSelect">
+          <option value="60">1 hour</option><option value="240">4 hour</option>
+          <option value="D" selected>Daily</option><option value="W">Weekly</option><option value="M">Monthly</option>
+        </select>
+      </label>
+      <label class="field" for="studiesSelect"><span class="field-label">Moving averages</span>
+        <select id="studiesSelect">
+          <option value="ma" selected>50 / 100 / 200</option><option value="ma-vol">MA + Volume</option><option value="ma-rsi">MA + RSI</option>
+          <option value="none">Off</option><option value="vol">Volume only</option><option value="rsi">RSI only</option>
+        </select>
+      </label>
+      <button class="button layout-button" id="layoutButton" type="button">Stack view</button>
+      <button class="button" id="addSymbolButton" type="button">Add symbol</button>
+      <button class="button" id="resetButton" type="button">Reset</button>
+    </div>
+    <button class="button" id="themeButton" type="button" title="Switch light / dark theme">Light</button>
+    <button class="button" id="refreshButton" type="button" title="Reload the latest data">Refresh</button>
     <span class="connection" id="connectionStatus"><span class="connection-dot"></span><span id="connectionText">Browser online</span></span>
   </div>
   <div class="add-bar" id="addBar">
@@ -55,7 +60,7 @@
     <button class="button is-on" id="addConfirmButton" type="button">Add</button>
   </div>
   <section class="page is-on" id="tablePage">
-    <p class="delay-note" id="delayNote">Prices are delayed ~15 minutes (not live). Market cap and enterprise value in EUR.</p>
+    <p class="delay-note" id="delayNote">Prices are delayed ~15 minutes (not live). <span class="eq-only">Market cap and enterprise value in EUR.</span><span class="macro-only">Yield changes in basis points.</span></p>
     <details class="explain" id="explain" open>
       <summary><span class="explain-title">How to read this table</span><span class="explain-hint">Price · Volume · Moving averages · Cap</span></summary>
       <div class="explain-grid">
@@ -64,7 +69,7 @@
         <div class="ex-item ex-ma"><h3>Moving averages &amp; cap</h3><p>% vs N-day SMA: <span class="up">+%</span> above <i class="dot above"></i>, <span class="dn">−%</span> below <i class="dot below"></i>. <b>Mkt cap</b> / <b>EV</b> in EUR (Yahoo; FX as of <b id="exFxAsOf">…</b>). Yields in bp.</p></div>
       </div>
     </details>
-    <div class="tbl-tabs" id="tblTabs" role="tablist" aria-label="Instrument groups"></div>
+    <div class="tbl-tabs" id="tblTabs" role="tablist" aria-label="Equity groups"></div>
     <div class="tbl-bar">
       <div class="seg mode-seg" role="group" aria-label="Column mode">
         <button class="button" id="priceModeBtn" type="button" aria-pressed="true" title="Show price-return columns">Price</button>
@@ -76,6 +81,7 @@
     </div>
     <div class="movers" id="tblMovers"></div>
     <div class="tbl-wrap" id="tblWrap"><table class="mtable" id="tbl"></table></div>
+    <div class="macro" id="macroWrap"></div>
     <p class="tbl-foot" id="tblFoot"></p>
     <nav class="pw-subnav" id="pwSubnav" aria-label="Nordic Power sections"></nav>
     <div class="power-view" id="powerView"></div>
@@ -93,7 +99,7 @@
     </div>
     <main class="dashboard" id="dashboard"></main>
   </section>
-  <footer>Table: Yahoo Finance daily data via GitHub Actions. Nordic Power: EEX settlements, ENTSO-E Transparency day-ahead prices, SE4 wind/load/outages and reservoirs (Energy-Charts / Energi Data Service fallback), NVE hydro, Svenska kraftnät SE4 load/flows. <span id="footStamp"></span> Charts: TradingView widgets. Treasury yields cannot be embedded, so Monitor Rates uses bond ETFs and Table yield rows open a Yahoo 1Y chart. Markets search uses a static symbol index (LSE/AIM, OMX Stockholm, Oslo, NYSE/Nasdaq, TSX/TSXV, HKEX; works offline). TradingView lookup is tried when reachable; exotic names may need EXCH:SYM or in-chart search.</footer>
+  <footer>Table: Yahoo Finance daily data via GitHub Actions. Nordic Power: EEX settlements, ENTSO-E Transparency day-ahead prices, SE4 wind/load/outages and reservoirs (Energy-Charts / Energi Data Service fallback), NVE hydro, Svenska kraftnät SE4 load/flows. <span id="footStamp"></span> Charts: TradingView widgets. Treasury yields cannot be embedded, so the Rates chart uses bond ETFs and Table yield rows open a Yahoo 1Y chart. Markets search uses a static symbol index (LSE/AIM, OMX Stockholm, Oslo, NYSE/Nasdaq, TSX/TSXV, HKEX; works offline). TradingView lookup is tried when reachable; exotic names may need EXCH:SYM or in-chart search.</footer>
 </div>
 <div class="sr-only" id="appStatus" role="status"></div>
 <div class="co-layer" id="coLayer" hidden>
@@ -141,10 +147,10 @@
     </div>
   </section>
 </div>
-<script src="app.js?v=20261006b"></script>
+<script src="app.js?v=20261006d"></script>
 <script src="power-map.js?v=20261006c"></script>
 <script src="power.js?v=20261006c"></script>
 <script src="company.js?v=20261006b"></script>
-<script src="table.js?v=20261006b"></script>
+<script src="table.js?v=20261006d"></script>
 </body>
 </html>

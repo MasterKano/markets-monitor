@@ -107,3 +107,12 @@ body.modal-open{overflow:hidden}
  .news-list{grid-template-columns:1fr}.news-item time{min-width:78px}
  .modal{padding:0}.modal-card{height:100dvh;border-radius:0}
 }
+/* Equities chips only on Equities; Macro = indices, commodities, rates & FX stacked on one page */
+body:not(.view-equities) #tblTabs{display:none}
+body:not(.view-macro) #macroWrap,body.view-macro #tblWrap,body.is-power #macroWrap{display:none}
+.macro-sec{margin:0 0 18px}.macro-sec[hidden]{display:none}
+.macro-head{display:flex;align-items:center;gap:12px;margin:6px 2px 8px}
+.macro-h{margin:0;font-size:15px;font-weight:750;letter-spacing:.1px}
+.macro-meta{display:inline-flex;align-items:center;gap:8px;color:var(--muted);font-size:11.5px}.macro-meta .breadth{width:44px}
+.tbl-wrap.macro-wrap{max-height:none;min-height:0}
+body:not(.view-macro) .macro-only,body.view-macro .eq-only{display:none}
