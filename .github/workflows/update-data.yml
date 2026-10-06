@@ -51,7 +51,7 @@ jobs:
         if: env.MODE != 'power'
         run: python scripts/build_data.py
       - name: Company fundamentals (Yahoo, company panel)
-        # ~1-2 min; morning + evening builds only (not the 12:30 power-only run)
+        # ~1 min (4 threads); index data/companies.json + per-company data/co/*.json; not on power-only runs
         if: env.MODE != 'power'
         run: python scripts/build_companies.py
         timeout-minutes: 8
@@ -78,16 +78,21 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898333+github-actions[bot]@users.noreply.github.com"
-          # only the files this run actually rewrote (steps can be skipped per schedule)
-          changed=$(git status --porcelain -- data/market.json data/news.json data/power.json data/symbols.json data/companies.json | awk '{print $2}')
-          if [ -z "$changed" ]; then echo "No data changes"; exit 0; fi
-          mkdir -p "$RUNNER_TEMP/out" && cp $changed "$RUNNER_TEMP/out/"
+          # only the files this run actually rewrote (steps can be skipped per schedule);
+          # data/co/ holds the per-company detail files (new, changed and removed ones)
+          paths="data/market.json data/news.json data/power.json data/symbols.json data/companies.json data/co"
+          st=$(git status --porcelain -uall -- $paths)
+          if [ -z "$st" ]; then echo "No data changes"; exit 0; fi
+          changed=$(echo "$st" | awk '$1!="D"{print $NF}')
+          deleted=$(echo "$st" | awk '$1=="D"{print $NF}')
+          for f in $changed; do mkdir -p "$RUNNER_TEMP/out/$(dirname "$f")"; cp "$f" "$RUNNER_TEMP/out/$f"; done
           for i in 1 2 3; do
             # rebuild the commit on top of the current branch tip (this run's files are the newest)
             git fetch -q origin "${GITHUB_REF_NAME}"
             git reset -q --hard "origin/${GITHUB_REF_NAME}"
-            for f in $changed; do cp "$RUNNER_TEMP/out/$(basename "$f")" "$f"; done
-            git add $changed
+            for f in $changed; do mkdir -p "$(dirname "$f")"; cp "$RUNNER_TEMP/out/$f" "$f"; done
+            if [ -n "$changed" ]; then git add -- $changed; fi
+            for f in $deleted; do git rm -q --ignore-unmatch -- "$f"; done
             if git diff --cached --quiet; then echo "No data changes"; exit 0; fi
             git commit -q -m "Update market data $(date -u +'%Y-%m-%d %H:%M') UTC"
             git push origin "HEAD:${GITHUB_REF_NAME}" && exit 0
