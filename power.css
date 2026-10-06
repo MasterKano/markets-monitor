@@ -148,3 +148,30 @@ body.is-power #explain{display:none}
 .pw-mix-row .hb{position:relative;height:10px;border-radius:5px;background:var(--panel-deep);border:1px solid var(--border);overflow:hidden}.pw-mix-row .hb i{position:absolute;left:0;top:0;bottom:0;opacity:.85}
 .pw-mix-row .hv{text-align:right;font-weight:650}.pw-mix-row .hd{text-align:right;color:var(--muted);font-size:10.5px}
 .pw-mix-sum{margin-top:2px;color:var(--muted);font-size:10.5px}
+/* ENTSO-E cards (SE4 wind, value of wind, load, outages; reservoirs) */
+.pw-s4-wide{margin-bottom:var(--gap)}
+.pw-grid-stats.pw-stats-2{grid-template-columns:repeat(2,minmax(0,1fr))}
+.pw-grid-stats b small{color:var(--faint);font-size:10px;font-weight:600}
+.pw-rate{display:inline-block;min-width:40px;padding:1px 6px;border-radius:999px;font-weight:700;text-align:center;background:color-mix(in srgb,var(--pw-wind) 16%,transparent);color:var(--text)}
+.pw-rate.lo{background:color-mix(in srgb,var(--bad) 18%,transparent)}.pw-rate.hi{background:color-mix(in srgb,var(--good) 22%,transparent)}
+.pw-tbl th.c-z em{color:var(--faint);font-style:normal;font-weight:600;font-size:10px;margin-left:4px}
+.pw-tbl tr.pw-exp th,.pw-tbl tr.pw-exp td{background:color-mix(in srgb,var(--panel-deep) 55%,transparent)}
+.pw-tbl tr.pw-dim td{text-align:left}
+.pw-tbl tr.nb-first th,.pw-tbl tr.nb-first td,.pw-heat tr.nb-first th,.pw-heat tr.nb-first td{border-top:1px dashed var(--border-strong)}
+.pw-tbl td.up{color:var(--good)}.pw-tbl td.dn{color:var(--bad)}
+.pw-tbl td small{color:var(--faint);font-size:10px}
+.pw-mut{color:var(--faint);font-size:10.5px}
+.pw-res .c-spark{width:104px;text-align:right}.pw-res .c-spark svg{display:block;margin-left:auto}
+.pw-wk{display:grid;grid-template-columns:repeat(auto-fill,minmax(112px,1fr));gap:6px;margin-bottom:4px}
+.pw-wk div{display:flex;flex-direction:column;gap:1px;padding:5px 8px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--panel-deep)}
+.pw-wk span{color:var(--faint);font-size:10px;font-weight:650}.pw-wk b{font-size:12px;font-variant-numeric:tabular-nums}
+.pw-pill{display:inline-block;padding:0 6px;border-radius:999px;font-size:9.5px;font-weight:750;letter-spacing:.4px;text-transform:uppercase;line-height:16px;color:var(--muted);border:1px solid var(--border)}
+.pw-pill.on{color:var(--accent);border-color:color-mix(in srgb,var(--accent) 55%,var(--border));margin-left:4px}
+.pw-pill.forced{color:var(--bad);border-color:color-mix(in srgb,var(--bad) 55%,var(--border))}
+.pw-empty-s{padding:10px 12px 14px;text-align:left}
+@media(max-width:760px){.pw-out th,.pw-out td{padding:0 5px}.pw-res .c-spark{width:80px}}
+.pw-now{display:inline-block;width:7px;height:7px;margin-right:7px;border-radius:50%;border:1.5px solid var(--faint);vertical-align:0}
+tr.is-now .pw-now,.pw-now.on{background:var(--accent);border-color:var(--accent)}
+.pw-wk{grid-template-columns:repeat(3,minmax(0,1fr))}
+@media(max-width:760px){.pw-t{display:none}.pw-wk{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:760px){.pw-res .c-spark{display:none}}

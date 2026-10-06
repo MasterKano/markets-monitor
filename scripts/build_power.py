@@ -5,15 +5,18 @@ Sources (free; no API key except the optional ENTSO-E part; real data only, miss
   * EEX daily settlements: the public CSV kept by MasterKano/scrape (master/eex_master.csv), read from
     raw.githubusercontent.com. Power base futures (Nordic system + zonal, DE and other EU areas),
     TTF gas, EUA, API2 coal, Guarantees of Origin (wind). History starts 1 Sep 2026 (no backfill).
-  * Day-ahead prices per bidding zone: Fraunhofer ISE Energy-Charts API (CC BY 4.0). If a zone fails,
-    Energinet's Energi Data Service (DayAheadPrices) is used for the zones it publishes (DK1, DK2, NO2,
-    SE3, SE4, DE), then spot-hinta.fi (today/tomorrow only). Daily averages from earlier runs are kept.
+  * Day-ahead prices per bidding zone (Nordic zones + DE-LU, PL, LT): ENTSO-E Transparency A44 when the token is
+    set (92 days of history, 15-min MTU averaged to hourly for display). Fallbacks per zone: Fraunhofer ISE
+    Energy-Charts API (CC BY 4.0), Energinet's Energi Data Service (DK1, DK2, NO2, SE3, SE4, DE), then
+    spot-hinta.fi (today/tomorrow only). Daily averages from earlier runs are kept.
   * Generation per bidding zone (Energy-Charts public_power, when available) for computed capture prices.
   * Hydro: NVE magasinstatistikk API (Norway, weekly). Sweden: Energiföretagen weekly PDF snapshot.
   * Svenska kraftnät (no key): Kontrollrummet consumption forecast/outcome and solar plans per bidding area,
     Sweden production by type, and data.svk.se physical flows (CC BY 4.0) into / out of SE4.
-  * Optional: ENTSO-E Transparency (load, generation per type, wind/solar forecast) for SE4, only when the
-    env var ENTSOE_API_TOKEN is set (GitHub secret of the same name); skipped silently otherwise.
+  * ENTSO-E Transparency (env ENTSOE_API_TOKEN, GitHub secret of the same name; skipped when unset): SE4 wind/solar
+    actual (A75) vs day-ahead forecast (A69), load actual vs day-ahead forecast (A65) + week-ahead min/max,
+    physical flows on SE4 borders (A11), outages aggregated without unit names (A80/A78), weekly reservoir
+    stored energy (A72) for SE1-4 / NO1-5, and computed wind/solar capture prices.
 
 Usage: python scripts/build_power.py [--out data/power.json] [--skip-spot] [--eex-csv PATH]
 """
@@ -38,14 +41,19 @@ HIST_START = "2026-09-01"
 
 NORDIC_FUT = ["Nordic", "NO1", "NO2", "NO3", "NO4", "NO5", "SE1", "SE2", "SE3", "SE4", "FI"]
 EU_FUT = ["DE", "FR", "NL", "GB", "ES", "IT"]
-SPOT_ZONES = ["NO1", "NO2", "NO3", "NO4", "NO5", "SE1", "SE2", "SE3", "SE4", "FI", "DK1", "DK2", "DE-LU"]
-NORDIC_SPOT = SPOT_ZONES[:-1]
+SPOT_ZONES = ["NO1", "NO2", "NO3", "NO4", "NO5", "SE1", "SE2", "SE3", "SE4", "FI", "DK1", "DK2", "DE-LU", "PL", "LT"]
+NORDIC_SPOT = SPOT_ZONES[:12]
+SPOT_KEEP_DAYS = 95
 EDS_MAP = {"DK1": "DK1", "DK2": "DK2", "NO2": "NO2", "SE3": "SE3", "SE4": "SE4", "DE-LU": "DE"}
 MON = {m: i for i, m in enumerate(["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"], 1)}
 
 
 def log(*a):
-    print(*a, file=sys.stderr, flush=True)
+    msg = " ".join(str(x) for x in a)
+    t = (os.environ.get("ENTSOE_API_TOKEN") or "").strip()
+    if t:
+        msg = msg.replace(t, "***")
+    print(re.sub(r"(securityToken=)[^&\s'\"]+", r"\1***", msg), file=sys.stderr, flush=True)
 
 
 def get(url, tries=4, ok=(200,), **kw):
@@ -279,11 +287,17 @@ def spot_hinta(zone):
     return pd.Series([x["PriceNoTax"] * 1000 for x in js], index=idx, dtype="float64")
 
 
-def build_spot(today):
+def build_spot(today, primary=None, primary_status=None):
+    """primary: {zone: series} from ENTSO-E A44 (when the token is set). Energy-Charts, Energi Data Service and
+    spot-hinta.fi are only used for zones the primary source did not return."""
     start = (today - dt.timedelta(days=32)).isoformat()
     end = (today + dt.timedelta(days=1)).isoformat()
-    zones, status, raw = {}, [], {}
-    for i, z in enumerate(SPOT_ZONES):
+    zones, status, raw = {}, list(primary_status or []), {}
+    for z, s in (primary or {}).items():
+        if z in SPOT_ZONES and s is not None and len(s):
+            raw[z] = ("ENTSO-E", s)
+    ec_zones = [z for z in SPOT_ZONES if z not in raw]
+    for i, z in enumerate(ec_zones):
         if i:
             time.sleep(31)  # Energy-Charts rate limit on /price: ~2 requests/minute
         try:
@@ -294,9 +308,9 @@ def build_spot(today):
         except Exception as e:
             status.append(dict(zone=z, src="Energy-Charts", ok=False, error=str(e)[:160]))
             log(f"spot {z}: Energy-Charts failed: {e}")
-            if i == 1 and not any(x["ok"] for x in status):
+            if i == 1 and not any(x["ok"] and x["src"] == "Energy-Charts" for x in status):
                 log("Energy-Charts unavailable for the first two zones - skipping the rest")
-                for z2 in SPOT_ZONES[2:]:
+                for z2 in ec_zones[2:]:
                     status.append(dict(zone=z2, src="Energy-Charts", ok=False, error="skipped (API unavailable)"))
                 break
     missing = [z for z in SPOT_ZONES if z not in raw and z in EDS_MAP]
@@ -313,7 +327,7 @@ def build_spot(today):
             status.append(dict(zone="*", src="Energi Data Service", ok=False, error=str(e)[:160]))
             log(f"EDS failed: {e}")
     for z in SPOT_ZONES:
-        if z in raw or z == "DE-LU":
+        if z in raw or z in ("DE-LU", "PL"):
             continue
         try:
             s = spot_hinta(z)
@@ -339,7 +353,7 @@ def build_capture(raw_prices, today):
     end = (today - dt.timedelta(days=1)).isoformat()
     targets = [("FI", "fi"), ("DE-LU", "de")]
     for i, (z, code) in enumerate(targets):
-        if z not in raw_prices or raw_prices[z][0] != "Energy-Charts":
+        if z not in raw_prices:
             continue
         if i:
             time.sleep(31)
@@ -536,13 +550,34 @@ def build_svk(today):
     return res
 
 
-# ------------------------------------------------------------------ ENTSO-E (optional, needs a free API token)
+# ------------------------------------------------------------------ ENTSO-E Transparency (needs ENTSOE_API_TOKEN)
+# The token is read from the environment only and never logged: every message that can contain a request URL
+# goes through _redact(). Requests are throttled well below the 400/min limit and retried on 429/5xx.
 ENTSOE_API = "https://web-api.tp.entsoe.eu/api"
-ENTSOE_EIC = {"SE1": "10Y1001A1001A44P", "SE2": "10Y1001A1001A45N", "SE3": "10Y1001A1001A46L",
-              "SE4": "10Y1001A1001A47J", "DK2": "10YDK-2--------M", "DE-LU": "10Y1001A1001A82H"}
-PSR = {"B19": "wind_on", "B18": "wind_off", "B16": "solar", "B14": "nuclear", "B12": "hydro_res", "B11": "hydro_ror",
-       "B10": "hydro_pump", "B04": "gas", "B01": "biomass", "B17": "waste", "B20": "other"}
-_RES = {"PT15M": 15, "PT30M": 30, "PT60M": 60}
+ENTSOE_EIC = {"NO1": "10YNO-1--------2", "NO2": "10YNO-2--------T", "NO3": "10YNO-3--------J",
+              "NO4": "10YNO-4--------9", "NO5": "10Y1001A1001A48H",
+              "SE1": "10Y1001A1001A44P", "SE2": "10Y1001A1001A45N", "SE3": "10Y1001A1001A46L", "SE4": "10Y1001A1001A47J",
+              "FI": "10YFI-1--------U", "DK1": "10YDK-1--------W", "DK2": "10YDK-2--------M",
+              "DE-LU": "10Y1001A1001A82H", "PL": "10YPL-AREA-----S", "LT": "10YLT-1001A0008Q"}
+SE4_BORDERS = ["SE3", "DK2", "DE-LU", "PL", "LT"]
+RES_ZONES = ["SE1", "SE2", "SE3", "SE4", "NO1", "NO2", "NO3", "NO4", "NO5"]
+PSR = {"B19": "wind", "B18": "wind", "B16": "solar", "B14": "nuclear", "B12": "hydro", "B11": "hydro",
+       "B10": "hydro", "B04": "gas", "B05": "coal", "B06": "oil", "B01": "biomass", "B17": "waste", "B20": "other"}
+_RES = {"PT1M": 1, "PT15M": 15, "PT30M": 30, "PT60M": 60, "P1D": 1440, "P7D": 10080}
+_ENT_GAP = 0.25          # seconds between requests (<= 240/min, limit is 400/min)
+_ent_last = [0.0]
+
+
+def _token():
+    return (os.environ.get("ENTSOE_API_TOKEN") or "").strip()
+
+
+def _redact(msg):
+    msg = str(msg)
+    t = _token()
+    if t:
+        msg = msg.replace(t, "***")
+    return re.sub(r"(securityToken=)[^&\s'\"]+", r"\1***", msg)
 
 
 def _strip_ns(xml_text):
@@ -554,113 +589,479 @@ def _strip_ns(xml_text):
     return root
 
 
-def entsoe_parse(xml_text):
-    """ENTSO-E GL/Publication XML -> list of (psrType or None, in_domain?, pd.Series UTC). Handles A03 curves
-    (omitted positions repeat the previous value) and 15/30/60-min resolutions."""
-    root = _strip_ns(xml_text)
+def _ack(root):
     if root.tag.startswith("Acknowledgement"):
         reason = " ".join((t.text or "") for t in root.iter("text")).strip()
         raise LookupError(reason[:160] or "no data")
+
+
+def _periods(ts):
+    """Yield pd.Series (UTC) for each Period of a TimeSeries. A03 curves: omitted positions repeat the previous
+    value. Prices use <price.amount>, everything else <quantity>."""
+    for per in ts.iter():
+        if per.tag not in ("Period", "Available_Period"):   # unavailability docs use Available_Period
+            continue
+        start = pd.Timestamp(per.findtext("timeInterval/start")).tz_convert("UTC")
+        end = pd.Timestamp(per.findtext("timeInterval/end")).tz_convert("UTC")
+        step = _RES.get(per.findtext("resolution") or "", 60)
+        n = max(1, int(round((end - start).total_seconds() / (step * 60))))
+        pts = {}
+        for p in per.iter("Point"):
+            v = p.findtext("quantity")
+            if v is None:
+                v = p.findtext("price.amount")
+            if v is not None:
+                pts[int(p.findtext("position"))] = float(v)
+        vals, last = [], None
+        for i in range(1, n + 1):
+            last = pts.get(i, last)
+            vals.append(last)
+        idx = pd.date_range(start, periods=n, freq=f"{step}min")
+        yield step, pd.Series(vals, index=idx, dtype="float64")
+
+
+def entsoe_parse(xml_text):
+    """-> list of dicts {psr, is_in, step, s} (one per TimeSeries, periods concatenated)."""
+    root = _strip_ns(xml_text)
+    _ack(root)
     out = []
     for ts in root.iter("TimeSeries"):
-        psr = ts.findtext("MktPSRType/psrType")
-        is_in = ts.find("inBiddingZone_Domain.mRID") is not None or ts.find("outBiddingZone_Domain.mRID") is None
-        for per in ts.iter("Period"):
-            start = pd.Timestamp(per.findtext("timeInterval/start")).tz_convert("UTC")
-            end = pd.Timestamp(per.findtext("timeInterval/end")).tz_convert("UTC")
-            step = _RES.get(per.findtext("resolution") or "", 60)
-            n = int((end - start).total_seconds() // (step * 60))
-            pts = {int(p.findtext("position")): float(p.findtext("quantity")) for p in per.iter("Point")}
-            vals, last = [], None
-            for i in range(1, n + 1):
-                last = pts.get(i, last)
-                vals.append(last)
-            idx = pd.date_range(start, periods=n, freq=f"{step}min")
-            out.append((psr, is_in, pd.Series(vals, index=idx, dtype="float64")))
+        parts = list(_periods(ts))
+        if not parts:
+            continue
+        s = pd.concat([p[1] for p in parts]).sort_index()
+        s = s[~s.index.duplicated(keep="last")]
+        out.append(dict(psr=ts.findtext("MktPSRType/psrType"),
+                        is_in=ts.find("inBiddingZone_Domain.mRID") is not None or ts.find("outBiddingZone_Domain.mRID") is None,
+                        step=min(p[0] for p in parts), s=s))
     return out
 
 
-def entsoe_get(token, params):
-    p = dict(params, securityToken=token)
-    r = S.get(ENTSOE_API, params=p, timeout=60)
-    if r.status_code == 401:
-        raise PermissionError("ENTSO-E rejected the token (HTTP 401)")
-    if r.status_code not in (200, 400):
-        raise IOError(f"HTTP {r.status_code}")
+def entsoe_raw(params, tries=4):
+    token = _token()
+    if not token:
+        raise PermissionError("ENTSOE_API_TOKEN not set")
+    last = None
+    for i in range(tries):
+        wait = _ENT_GAP - (time.time() - _ent_last[0])
+        if wait > 0:
+            time.sleep(wait)
+        _ent_last[0] = time.time()
+        try:
+            r = S.get(ENTSOE_API, params=dict(params, securityToken=token), timeout=90)
+        except Exception as e:
+            last = IOError(_redact(f"{type(e).__name__}: {e}")[:200])
+            time.sleep(3 * (i + 1))
+            continue
+        if r.status_code == 401:
+            raise PermissionError("ENTSO-E rejected the token (HTTP 401)")
+        if r.status_code == 429 or r.status_code >= 500:
+            last = IOError(f"HTTP {r.status_code}")
+            time.sleep(min(60, float(r.headers.get("Retry-After") or 0) or 6 * (i + 1)))
+            continue
+        if r.status_code not in (200, 400):
+            raise IOError(f"HTTP {r.status_code}")
+        return r
+    raise last
+
+
+def entsoe_get(params):
+    r = entsoe_raw(params)
     return entsoe_parse(r.text)
 
 
-def _hourly(series_list):
-    if not series_list:
+def entsoe_docs(params):
+    """Unavailability queries (A78/A80) answer with a zip of XML documents (or a single XML / acknowledgement)."""
+    import zipfile
+    r = entsoe_raw(params)
+    if r.content[:2] == b"PK":
+        z = zipfile.ZipFile(io.BytesIO(r.content))
+        return [_strip_ns(z.read(n)) for n in z.namelist()]
+    root = _strip_ns(r.text)
+    _ack(root)
+    return [root]
+
+
+def _ts(t):
+    return t.isoformat().replace("+00:00", "Z")
+
+
+def _cet_bounds(d0, d1):
+    """Geneva-time days [d0, d1) -> UTC Timestamps."""
+    a = dt.datetime.combine(d0, dt.time(), CET).astimezone(UTC)
+    b = dt.datetime.combine(d1, dt.time(), CET).astimezone(UTC)
+    return pd.Timestamp(a), pd.Timestamp(b)
+
+
+def _period(d0, d1):
+    a, b = _cet_bounds(d0, d1)
+    return dict(periodStart=a.strftime("%Y%m%d%H%M"), periodEnd=b.strftime("%Y%m%d%H%M"))
+
+
+def _combine(items):
+    """Several TimeSeries for the same quantity (e.g. revisions or mixed resolutions): finest resolution first."""
+    s = None
+    for it in sorted(items, key=lambda x: x["step"]):
+        s = it["s"] if s is None else s.combine_first(it["s"])
+    return s
+
+
+def _sum(items):
+    if not items:
         return None
-    s = pd.concat(series_list, axis=1).sum(axis=1, min_count=1) if len(series_list) > 1 else series_list[0]
-    s = s[~s.index.duplicated(keep="last")].sort_index()
-    return s.resample("1h").mean()
+    if len(items) == 1:
+        return items[0]
+    df = pd.concat(items, axis=1).sort_index()
+    df = df.ffill(limit=3)  # hourly series on a 15-min grid
+    return df.sum(axis=1, min_count=1)
 
 
-def build_entsoe(today):
-    """Optional ENTSO-E Transparency data (load, generation per type, wind/solar forecast) for the focus zone(s).
-    Needs env ENTSOE_API_TOKEN (GitHub Actions secret of the same name). Without it this returns a 'disabled'
-    stub and the page simply hides the panel; nothing fails."""
-    token = (os.environ.get("ENTSOE_API_TOKEN") or "").strip()
-    zones = [z.strip() for z in (os.environ.get("ENTSOE_ZONES") or "SE4").split(",") if z.strip() in ENTSOE_EIC]
-    if not token:
-        log("entsoe: ENTSOE_API_TOKEN not set - skipped")
-        return dict(enabled=False, reason="not configured")
-    t0 = dt.datetime.combine(today - dt.timedelta(days=7), dt.time(), CET).astimezone(UTC)
-    t1 = dt.datetime.combine(today + dt.timedelta(days=2), dt.time(), CET).astimezone(UTC)
-    span = dict(periodStart=t0.strftime("%Y%m%d%H%M"), periodEnd=t1.strftime("%Y%m%d%H%M"))
-    res = dict(enabled=True, source="ENTSO-E Transparency Platform", zones={}, errors=[])
-    for z in zones:
-        eic = ENTSOE_EIC[z]
-        zr, hourly = {}, {}
-        queries = {
-            "load": dict(documentType="A65", processType="A16", outBiddingZone_Domain=eic),
-            "load_fc": dict(documentType="A65", processType="A01", outBiddingZone_Domain=eic),
-            "gen": dict(documentType="A75", processType="A16", in_Domain=eic),
-            "ws_fc": dict(documentType="A69", processType="A01", in_Domain=eic),
-        }
-        for key, q in queries.items():
+def entsoe_prices(today, days=92):
+    """A44 day-ahead prices for all zones; delivery days [today-days, today+2). -> {zone: series}, status."""
+    out, status = {}, []
+    per = _period(today - dt.timedelta(days=days), today + dt.timedelta(days=2))
+    for z, eic in ENTSOE_EIC.items():
+        try:
+            items = entsoe_get(dict(documentType="A44", in_Domain=eic, out_Domain=eic, **per))
+            s = _combine(items)
+            if s is None or s.notna().sum() == 0:
+                raise LookupError("empty")
+            out[z] = s.dropna()
+            status.append(dict(zone=z, src="ENTSO-E", ok=True, n=int(len(out[z])), last=_ts(out[z].index[-1])))
+            log(f"spot {z}: {len(out[z])} pts via ENTSO-E")
+        except PermissionError:
+            raise
+        except Exception as e:
+            status.append(dict(zone=z, src="ENTSO-E", ok=False, error=_redact(e)[:160]))
+            log(f"spot {z}: ENTSO-E failed: {_redact(e)}")
+    return out, status
+
+
+def _hourly(s, idx):
+    if s is None:
+        return [None] * len(idx)
+    h = s.resample("1h").mean().reindex(idx)
+    return [None if pd.isna(v) else int(round(v)) for v in h]
+
+
+def _weighted(price, gen, a, b):
+    """Generation-weighted price over [a, b): sum(p*g)/sum(g), plus the time-average of p over the same periods."""
+    p = price[(price.index >= a) & (price.index < b)]
+    if gen is None or not len(p):
+        return None
+    g = gen.reindex(p.index)
+    if g.isna().mean() > 0.5:   # e.g. hourly generation vs 15-min prices
+        g = gen.resample("15min").ffill(limit=3).reindex(p.index)
+    ok = p.notna() & g.notna()
+    g = g.clip(lower=0)
+    if ok.sum() < 0.8 * len(p) or g[ok].sum() <= 0:
+        return None
+    cap = float((p[ok] * g[ok]).sum() / g[ok].sum())
+    base = float(p[ok].mean())
+    return dict(base=rnd(base), cap=rnd(cap), rate=rnd(cap / base, 3) if base > 0 else None,
+                mw=rnd(g[ok].mean(), 0))
+
+
+def _docs_latest(docs):
+    """Unavailability docs -> latest revision per mRID, cancelled/withdrawn (A09/A13) dropped."""
+    best = {}
+    for d in docs:
+        mrid = d.findtext("mRID") or str(id(d))
+        rev = int(d.findtext("revisionNumber") or 0)
+        if mrid not in best or rev > best[mrid][0]:
+            best[mrid] = (rev, d)
+    return [d for rev, d in best.values() if (d.findtext("docStatus/value") or "") not in ("A09", "A13")]
+
+
+def entsoe_outages_gen(now, today):
+    """A80 generation-unit unavailability in SE4 -> aggregated by fuel type (no unit or plant names are kept)."""
+    docs = _docs_latest(entsoe_docs(dict(documentType="A80", biddingZone_Domain=ENTSOE_EIC["SE4"],
+                                         **_period(today - dt.timedelta(days=1), today + dt.timedelta(days=15)))))
+    now_t, wk = pd.Timestamp(now), pd.Timestamp(now) + pd.Timedelta(days=7)
+    agg = {}
+    for d in docs:
+        for ts in d.iter("TimeSeries"):
+            psr = PSR.get(ts.findtext("production_RegisteredResource.pSRType.psrType") or "", "other")
             try:
-                rows = entsoe_get(token, dict(q, **span))
-                if key in ("load", "load_fc"):
-                    hourly[key] = _hourly([s for _, _, s in rows])
-                elif key == "gen":
-                    by = {}
-                    for psr, is_in, s in rows:
-                        if is_in:
-                            by.setdefault(PSR.get(psr, "other"), []).append(s)
-                    for k, lst in by.items():
-                        hourly["gen_" + k] = _hourly(lst)
-                    tot = [h for k, h in hourly.items() if k.startswith("gen_") and h is not None]
-                    if tot:
-                        hourly["gen_total"] = pd.concat(tot, axis=1).sum(axis=1, min_count=1)
-                else:
-                    by = {}
-                    for psr, _, s in rows:
-                        by.setdefault(PSR.get(psr, "other"), []).append(s)
-                    for k, lst in by.items():
-                        hourly["fc_" + k] = _hourly(lst)
-                log(f"entsoe {z} {key}: ok")
+                nom = float(ts.findtext("production_RegisteredResource.pSRType.powerSystemResources.nominalP") or "nan")
+            except ValueError:
+                nom = float("nan")
+            biz = ts.findtext("businessType") or ""
+            for step, s in _periods(ts):
+                if not len(s) or math.isnan(nom):
+                    continue
+                a, b = s.index[0], s.index[-1] + pd.Timedelta(minutes=step)
+                if b <= now_t or a >= wk:
+                    continue
+                cur = s[(s.index <= now_t)]
+                active = a <= now_t < b
+                lost_now = max(0.0, nom - float(cur.iloc[-1])) if active and len(cur) else 0.0
+                lost_max = max(0.0, nom - float(s.min()))
+                r = agg.setdefault(psr, dict(now_mw=0.0, now_n=0, wk_mw=0.0, wk_n=0, planned=0, forced=0))
+                if active and lost_now > 0:
+                    r["now_mw"] += lost_now
+                    r["now_n"] += 1
+                if lost_max > 0:
+                    r["wk_mw"] += lost_max
+                    r["wk_n"] += 1
+                    r["forced" if biz == "A54" else "planned"] += 1
+    rows = [dict(type=k, now_mw=rnd(v["now_mw"], 0), now_n=v["now_n"], wk_mw=rnd(v["wk_mw"], 0), wk_n=v["wk_n"],
+                 planned=v["planned"], forced=v["forced"]) for k, v in agg.items()]
+    rows.sort(key=lambda r: -(r["wk_mw"] or 0))
+    return rows
+
+
+def entsoe_outages_tx(now, today):
+    """A78 transmission unavailability on SE4 interconnectors -> border, direction, available MW, window, type.
+    Line / asset names are not kept."""
+    now_t = pd.Timestamp(now)
+    rows, seen, errs = [], set(), []
+    per = _period(today - dt.timedelta(days=1), today + dt.timedelta(days=31))
+    for z in SE4_BORDERS:
+        for a_z, b_z in (("SE4", z), (z, "SE4")):
+            try:
+                docs = _docs_latest(entsoe_docs(dict(documentType="A78", in_Domain=ENTSOE_EIC[b_z],
+                                                     out_Domain=ENTSOE_EIC[a_z], **per)))
+            except LookupError:
+                continue
+            except PermissionError:
+                raise
             except Exception as e:
-                res["errors"].append(dict(zone=z, query=key, error=str(e)[:160]))
-                log(f"entsoe {z} {key}: {e}")
-            time.sleep(0.5)
-        if not hourly:
-            continue
-        idx = pd.date_range(t0, t1, freq="1h", inclusive="left", tz="UTC")
-        zr["t0"] = idx[0].isoformat().replace("+00:00", "Z")
-        zr["unit"] = "MW (hourly mean)"
-        zr["series"] = {k: [rnd(v, 0) for v in h.reindex(idx)] for k, h in sorted(hourly.items()) if h is not None}
-        res["zones"][z] = zr
-    if not res["zones"] and res["errors"]:
-        raise RuntimeError("; ".join(e["error"] for e in res["errors"])[:300])
+                errs.append(f"A78 {a_z}>{b_z}: {_redact(e)[:80]}")
+                continue
+            for d in docs:
+                for ts in d.iter("TimeSeries"):
+                    biz = ts.findtext("businessType") or ""
+                    for step, s in _periods(ts):
+                        if not len(s):
+                            continue
+                        t0, t1 = s.index[0], s.index[-1] + pd.Timedelta(minutes=step)
+                        if t1 <= now_t:
+                            continue
+                        key = (a_z, b_z, t0, t1)
+                        if key in seen:
+                            continue
+                        seen.add(key)
+                        rows.append(dict(frm=a_z, to=b_z, start=_ts(t0), end=_ts(t1), avail=rnd(s.min(), 0),
+                                         type="forced" if biz == "A54" else "planned", now=bool(t0 <= now_t < t1)))
+    rows.sort(key=lambda r: (not r["now"], r["start"]))
+    return rows[:14], errs
+
+
+def entsoe_reservoirs(today):
+    """A72 weekly stored energy (MWh) per zone -> last 53 weeks + the same weeks a year earlier (GWh)."""
+    out, errs = {}, []
+    for z in RES_ZONES:
+        try:
+            parts = []
+            for a, b in ((today - dt.timedelta(days=760), today - dt.timedelta(days=380)),
+                         (today - dt.timedelta(days=380), today + dt.timedelta(days=1))):
+                try:
+                    items = entsoe_get(dict(documentType="A72", processType="A16", in_Domain=ENTSOE_EIC[z], **_period(a, b)))
+                    parts += [it["s"] for it in items]
+                except LookupError:
+                    pass
+            if not parts:
+                raise LookupError("no data")
+            s = pd.concat(parts).sort_index()
+            s = s[~s.index.duplicated(keep="last")].dropna()
+            if len(s) < 2:
+                raise LookupError("too few points")
+            cur = s.iloc[-53:]
+            prev_vals = []
+            for t in cur.index:
+                tt = t - pd.Timedelta(days=364)
+                j = s.index.get_indexer([tt], method="nearest")[0]
+                prev_vals.append(rnd(s.iloc[j] / 1000, 0) if j >= 0 and abs((s.index[j] - tt).days) <= 3 else None)
+            weeks = [(t + pd.Timedelta(hours=12)).tz_convert(CET).date().isoformat() for t in cur.index]
+            out[z] = dict(w=weeks, v=[rnd(v / 1000, 0) for v in cur], ly=prev_vals)
+        except PermissionError:
+            raise
+        except Exception as e:
+            errs.append(f"A72 {z}: {_redact(e)[:80]}")
+    return out, errs
+
+
+def build_entsoe(today, now, prices, prev):
+    """SE4 detail (hourly window today-7 .. tomorrow, 30-day daily stats), interconnector flows, outages and
+    reservoirs. prices: {zone: series} from A44 (or other spot sources). Missing parts keep the previous values."""
+    if not _token():
+        return dict(enabled=False, reason="ENTSOE_API_TOKEN not set")
+    se4 = ENTSOE_EIC["SE4"]
+    res = dict(enabled=True, source="ENTSO-E Transparency Platform", errors=[], stale=[])
+    err = lambda k, e: (res["errors"].append(dict(q=k, error=_redact(e)[:160])), log(f"entsoe {k}: {_redact(e)}"))
+    h0, h1 = _cet_bounds(today - dt.timedelta(days=7), today + dt.timedelta(days=2))
+    hidx = pd.date_range(h0, h1, freq="1h", inclusive="left")
+    d30 = today - dt.timedelta(days=30)
+    per30 = _period(d30, today + dt.timedelta(days=2))
+    S4 = {}
+
+    def q(key, fn):
+        try:
+            S4[key] = fn()
+        except PermissionError:
+            raise
+        except Exception as e:
+            err(key, e)
+
+    def gen_actual():
+        items = [it for it in entsoe_get(dict(documentType="A75", processType="A16", in_Domain=se4, **_period(d30, today + dt.timedelta(days=1)))) if it["is_in"]]
+        by = {}
+        for it in items:
+            by.setdefault(PSR.get(it["psr"], "other"), []).append(it["s"])
+        return {k: _sum(v) for k, v in by.items()}
+
+    def ws_fc():
+        by = {}
+        for it in entsoe_get(dict(documentType="A69", processType="A01", in_Domain=se4, **per30)):
+            by.setdefault(PSR.get(it["psr"], "other"), []).append(it["s"])
+        return {k: _sum(v) for k, v in by.items()}
+
+    q("gen", gen_actual)
+    q("fc", ws_fc)
+    q("load", lambda: _combine(entsoe_get(dict(documentType="A65", processType="A16", outBiddingZone_Domain=se4,
+                                                  **_period(d30, today + dt.timedelta(days=1))))))
+    q("load_fc", lambda: _combine(entsoe_get(dict(documentType="A65", processType="A01", outBiddingZone_Domain=se4,
+                                                     **_period(today - dt.timedelta(days=7), today + dt.timedelta(days=2))))))
+
+    def load_week():
+        items = entsoe_get(dict(documentType="A65", processType="A31", outBiddingZone_Domain=se4,
+                                **_period(today, today + dt.timedelta(days=8))))
+        df = pd.concat([it["s"] for it in items], axis=1)
+        rows = []
+        for t, r in df.iterrows():
+            v = [x for x in r if not pd.isna(x)]
+            if v:
+                rows.append([(t + pd.Timedelta(hours=12)).tz_convert(CET).date().isoformat(), rnd(min(v), 0), rnd(max(v), 0)])
+        return rows
+    q("load_week", load_week)
+
+    def flows():
+        out = {}
+        per = _period(today - dt.timedelta(days=7), today + dt.timedelta(days=1))
+        for z in SE4_BORDERS:
+            try:
+                imp = _combine(entsoe_get(dict(documentType="A11", in_Domain=se4, out_Domain=ENTSOE_EIC[z], **per)))
+                exp = _combine(entsoe_get(dict(documentType="A11", in_Domain=ENTSOE_EIC[z], out_Domain=se4, **per)))
+                net = imp.sub(exp, fill_value=0) if imp is not None and exp is not None else (imp if imp is not None else -exp)
+                out[z] = _hourly(net, hidx)
+            except PermissionError:
+                raise
+            except Exception as e:
+                err(f"A11 {z}", e)
+        if not out:
+            raise LookupError("no flows")
+        return out
+    q("flows", flows)
+    q("out_gen", lambda: entsoe_outages_gen(now, today))
+
+    def tx():
+        rows, errs = entsoe_outages_tx(now, today)
+        for e in errs:
+            res["errors"].append(dict(q="A78", error=e))
+        return rows
+    q("out_tx", tx)
+
+    def reservoirs():
+        r, errs = entsoe_reservoirs(today)
+        for e in errs:
+            res["errors"].append(dict(q="A72", error=e))
+        if not r:
+            raise LookupError("no reservoir data")
+        return r
+    q("reservoirs", reservoirs)
+
+    # ---- assemble SE4
+    gen, fc = S4.get("gen") or {}, S4.get("fc") or {}
+    wind, solar = gen.get("wind"), gen.get("solar")
+    wind_fc, solar_fc = fc.get("wind"), fc.get("solar")
+    load, load_fc = S4.get("load"), S4.get("load_fc")
+    out = dict(t0=_ts(hidx[0]), n=len(hidx), unit="MW")
+    ser = {}
+    for k, s in (("wind", wind), ("wind_fc", wind_fc), ("solar", solar), ("solar_fc", solar_fc),
+                 ("load", load), ("load_fc", load_fc)):
+        if s is not None:
+            ser[k] = _hourly(s, hidx)
+    if gen:
+        other = _sum([v for k, v in gen.items() if k not in ("wind", "solar") and v is not None])
+        if other is not None:
+            ser["other_gen"] = _hourly(other, hidx)
+    if ser:
+        out["series"] = ser
+    if S4.get("flows"):
+        out["flows"] = S4["flows"]
+    if S4.get("load_week"):
+        out["load_week"] = S4["load_week"]
+
+    # value of wind: capture price vs baseload, computed from A44 prices x A75 actual / A69 forecast generation
+    price = prices.get("SE4")
+    if price is not None and (wind is not None or solar is not None):
+        daily = []
+        for i in range(30, 0, -1):
+            d = today - dt.timedelta(days=i)
+            a, b = _cet_bounds(d, d + dt.timedelta(days=1))
+            w = _weighted(price, wind, a, b)
+            s_ = _weighted(price, solar, a, b)
+            pd_ = price[(price.index >= a) & (price.index < b)]
+            base = rnd(pd_.mean()) if len(pd_) else None
+            if base is None and not w:
+                continue
+            daily.append([d.isoformat(), base, w and w["cap"], w and w["mw"], s_ and s_["cap"], s_ and s_["mw"]])
+        out["daily"] = daily
+        cap = {}
+        for key, n in (("d7", 7), ("d30", 30)):
+            a, _ = _cet_bounds(today - dt.timedelta(days=n), today)
+            b = _cet_bounds(today, today)[0]
+            cw, cs = _weighted(price, wind, a, b), _weighted(price, solar, a, b)
+            if cw or cs:
+                cap[key] = dict(wind=cw, solar=cs)
+        for key, d in (("today", today), ("tomorrow", today + dt.timedelta(days=1))):
+            a, b = _cet_bounds(d, d + dt.timedelta(days=1))
+            if len(price[(price.index >= a) & (price.index < b)]) and wind_fc is not None:
+                cw = _weighted(price, wind_fc, a, b)
+                if cw:
+                    cap[key + "_fc"] = dict(wind=cw, date=d.isoformat())
+        if cap:
+            out["capture"] = cap
+    # day-ahead wind forecast quality (A69 vs A75), last 7 complete days, hourly
+    if wind is not None and wind_fc is not None:
+        a, b = _cet_bounds(today - dt.timedelta(days=7), today)
+        hw = wind.resample("1h").mean()
+        hf = wind_fc.resample("1h").mean()
+        hw, hf = hw[(hw.index >= a) & (hw.index < b)], hf.reindex(hw[(hw.index >= a) & (hw.index < b)].index)
+        ok = hw.notna() & hf.notna()
+        if ok.sum() >= 48:
+            e = hf[ok] - hw[ok]
+            out["wind_err"] = dict(mae=rnd(e.abs().mean(), 0), bias=rnd(e.mean(), 0), mean=rnd(hw[ok].mean(), 0),
+                                   n=int(ok.sum()))
+    if "out_gen" in S4:
+        out["outages_gen"] = S4["out_gen"]
+    if "out_tx" in S4:
+        out["outages_tx"] = S4["out_tx"]
+
+    # keep previous values for parts that failed this run
+    pse4 = ((prev or {}).get("se4") or {})
+    for k in ("series", "flows", "load_week", "daily", "capture", "wind_err", "outages_gen", "outages_tx"):
+        if k not in out and pse4.get(k) is not None:
+            out[k] = pse4[k]
+            res["stale"].append(k)
+    if "series" in res["stale"]:
+        out["t0"], out["n"] = pse4.get("t0"), pse4.get("n")
+    res["se4"] = out
+    if S4.get("reservoirs"):
+        res["reservoirs"] = S4["reservoirs"]
+    elif (prev or {}).get("reservoirs"):
+        res["reservoirs"] = prev["reservoirs"]
+        res["stale"].append("reservoirs")
+    res["asof"] = now.isoformat(timespec="seconds")
+    if not ser and not S4:
+        raise RuntimeError("all ENTSO-E queries failed")
     return res
 
 
 def merge_spot_history(spot, prev, today):
     """Keep daily averages from earlier runs (so 7d/30d survive a source outage); newest run wins per day."""
-    keep_from = (today - dt.timedelta(days=40)).isoformat()
+    keep_from = (today - dt.timedelta(days=SPOT_KEEP_DAYS)).isoformat()
     for z in SPOT_ZONES:
         old = ((prev.get("zones") or {}).get(z) or {})
         cur = spot["zones"].get(z)
@@ -709,20 +1110,29 @@ def main():
     hydro = section("hydro_no", build_hydro_no)
     hydro_se = section("hydro_se", build_hydro_se)
     out["hydro"] = dict(no=hydro, se=hydro_se)
+    ent_px, ent_st = {}, []
+    if _token():
+        r = section("entsoe_prices", entsoe_prices, today)
+        if r:
+            ent_px, ent_st = r
     if a.skip_spot and prev.get("spot"):
         out["spot"], out["capture"] = prev.get("spot"), prev.get("capture")
     else:
-        spot = section("spot", build_spot, today)
+        spot = section("spot", build_spot, today, ent_px, ent_st)
         if spot:
             merge_spot_history(spot, prev.get("spot") or {}, today)
             raw = spot.pop("raw")
+            ent_px = {z: v[1] for z, v in raw.items()}
             spot["asof"] = now.isoformat(timespec="seconds")
             out["spot"] = spot
             out["capture"] = section("capture", build_capture, raw, today)
         else:
-            out["spot"] = None
+            out["spot"] = prev.get("spot")
+            if out["spot"]:
+                out["spot"]["stale"] = True
     out["svk"] = section("svk", build_svk, today)
-    out["entsoe"] = section("entsoe", build_entsoe, today) or dict(enabled=False, reason="failed")
+    out["entsoe"] = section("entsoe", build_entsoe, today, now, ent_px, prev.get("entsoe") or {}) \
+        or (dict(prev["entsoe"], stale=["all"]) if (prev.get("entsoe") or {}).get("enabled") else dict(enabled=False, reason="failed"))
     ok_parts = [k for k in ("eex",) if out.get(k)] + (["spot"] if out.get("spot") and out["spot"].get("zones") else []) \
         + (["hydro"] if hydro else [])
     if not ok_parts:

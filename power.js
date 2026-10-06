@@ -8,8 +8,9 @@ const esc=s=>String(s==null?"":s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;"
 const NA='<span class="na">n/a</span>';
 const isNum=v=>typeof v==="number"&&isFinite(v);
 const mean=a=>{const b=a.filter(isNum);return b.length?b.reduce((x,y)=>x+y,0)/b.length:null;};
-const SPOT=["NO1","NO2","NO3","NO4","NO5","SE1","SE2","SE3","SE4","FI","DK1","DK2","DE-LU"];
+const SPOT=["NO1","NO2","NO3","NO4","NO5","SE1","SE2","SE3","SE4","FI","DK1","DK2","DE-LU","PL","LT"];
 const NORDIC=SPOT.slice(0,12);
+const NEIGH=["DE-LU","PL","LT"];
 const FUT_N=["Nordic","NO1","NO2","NO3","NO4","NO5","SE1","SE2","SE3","SE4","FI"];
 const FUT_EU=["DE","FR","NL","GB","ES","IT"];
 const ZNAME={Nordic:"Nordic system",DE:"Germany",FR:"France",NL:"Netherlands",GB:"Great Britain",ES:"Spain",IT:"Italy","DE-LU":"DE-LU"};
@@ -113,21 +114,27 @@ function shell(){const v=$("powerView");v.innerHTML=
  '<div class="pw-grid pw-grid-hy">'+
   '<section class="pw-card"><div class="pw-card-head"><div><span class="panel-label">Norway · NVE weekly</span><strong class="panel-title" id="pwHyTitle"></strong></div><div class="pw-keys" id="pwHyKeys"></div></div><div class="pw-chips" id="pwHyChips"></div><div class="pw-chart" id="pwHydro"></div></section>'+
   '<section class="pw-card" id="pwHySide"></section>'+
- '</div></section>'+
- '<section class="pw-sec" id="pwSecSE4"><h2 class="pw-h">SE4 <span class="pw-sub">southern Sweden · day-ahead, spreads, forwards, load and flows (Svenska kraftnät)</span></h2>'+
+ '</div>'+
+ '<section class="pw-card pw-full" id="pwRes" hidden></section>'+
+ '</section>'+
+ '<section class="pw-sec" id="pwSecSE4"><h2 class="pw-h">SE4 <span class="pw-sub">southern Sweden · prices, wind, load, flows and outages (ENTSO-E Transparency, Svenska kraftnät, EEX)</span></h2>'+
  '<div class="pw-grid pw-grid-se4">'+
   '<section class="pw-card"><div class="pw-card-head"><div><span class="panel-label">Hourly profile</span><strong class="panel-title" id="pwS4HourTitle">SE4</strong></div><div class="pw-keys" id="pwS4HourKeys"></div></div><div class="pw-chart" id="pwS4Hour"></div></section>'+
   '<section class="pw-card"><div class="pw-card-head"><div><span class="panel-label">Daily average</span><strong class="panel-title" id="pwS4DayTitle">SE4 vs SE3 and DE-LU</strong></div><div class="pw-keys" id="pwS4DayKeys"></div></div><div class="pw-chart" id="pwS4Day"></div></section>'+
  '</div>'+
+ '<section class="pw-card pw-s4-wide" id="pwS4Wind" hidden></section>'+
  '<div class="pw-grid pw-grid-se4">'+
-  '<section class="pw-card"><div class="pw-card-head"><div><span class="panel-label">EEX SE4 zonal futures</span><strong class="panel-title" id="pwS4FwTitle">SE4 forwards</strong></div></div><div class="pw-tbl-wrap pw-s4fw-wrap"><table class="pw-tbl" id="pwS4Fw"></table></div><p class="pw-foot">EPAD = SE4 zonal future − Nordic system future (same tenor). Click a row to show SE4 in the forward curve.</p></section>'+
+  '<section class="pw-card" id="pwS4Value" hidden></section>'+
   '<section class="pw-card" id="pwS4Svk"></section>'+
  '</div>'+
  '<div class="pw-grid pw-grid-se4">'+
   '<section class="pw-card" id="pwS4Flows"></section>'+
+  '<section class="pw-card"><div class="pw-card-head"><div><span class="panel-label">EEX SE4 zonal futures</span><strong class="panel-title" id="pwS4FwTitle">SE4 forwards</strong></div></div><div class="pw-tbl-wrap pw-s4fw-wrap"><table class="pw-tbl" id="pwS4Fw"></table></div><p class="pw-foot">EPAD = SE4 zonal future − Nordic system future (same tenor). Click a row to show SE4 in the forward curve.</p></section>'+
+ '</div>'+
+ '<div class="pw-grid pw-grid-se4">'+
+  '<section class="pw-card" id="pwS4Out" hidden></section>'+
   '<section class="pw-card" id="pwS4Mix"></section>'+
  '</div>'+
- '<section class="pw-card pw-full" id="pwS4Grid" hidden></section>'+
  '</section>'+
  '<p class="pw-foot pw-credits" id="pwCredits"></p>';}
 
@@ -147,6 +154,7 @@ function renderKpis(){const K=keys(),E=P.eex,H=P.hydro&&P.hydro.no;const t=K.tod
  if(E)stamps.push('<span><i class="pw-dot"></i>EEX settlements <b>'+esc(tdlabel(E.asof))+'</b> <em>(history from 1 Sep 2026)</em></span>');else stamps.push('<span class="bad">EEX n/a</span>');
  if(sp&&sp.asof)stamps.push('<span><i class="pw-dot"></i>Day-ahead fetched <b>'+esc(fdt.format(new Date(sp.asof)))+'</b> · '+esc(ago(sp.asof))+' · '+esc((sp.sources||[]).join(", ")||"no source")+'</span>');else stamps.push('<span class="bad">Day-ahead n/a</span>');
  if(H&&H.regions&&H.regions.Norway&&H.regions.Norway.last)stamps.push('<span><i class="pw-dot"></i>NVE hydro <b>week '+H.regions.Norway.last.week+'</b> (to '+esc(dlabel(H.regions.Norway.last.date))+')</span>');
+ {const e=EN();if(e)stamps.push('<span><i class="pw-dot"></i>ENTSO-E Transparency <b>'+esc(e.asof?fdt.format(new Date(e.asof)):"")+'</b>'+((e.stale||[]).length?' <em>('+e.stale.length+' part(s) from an earlier build)</em>':"")+'</span>');}
  if(P.svk&&P.svk.zones)stamps.push('<span><i class="pw-dot"></i>Svenska kraftnät load / flows'+(P.svk.errors&&P.svk.errors.length?' <em>('+P.svk.errors.length+' part(s) n/a)</em>':'')+'</span>');
  const se=P.hydro&&P.hydro.se;if(se)stamps.push('<span><i class="pw-dot"></i>Energiföretagen <b>week '+se.week+'</b></span>');
  stamps.push('<span>Built '+esc(fdt.format(new Date(P.generated_utc)))+' Geneva</span>');
@@ -172,11 +180,11 @@ function renderMap(){const M=window.PW_MAP,K=keys();const k=st.day==="tomorrow"?
 function renderHeat(){const K=keys();const k=st.day==="tomorrow"?K.tomorrow:K.today;
  const recs=SPOT.map(z=>[z,dayRec(z,k)]);const any=recs.find(r=>r[1]);
  $("pwHeatTitle").textContent="Zones × hours · "+dlabel(k);
- if(!any){$("pwHeat").innerHTML='<div class="pw-empty">'+(st.day==="tomorrow"?"Tomorrow's day-ahead prices are not published yet (auction results ~12:45 CET; this page refreshes ~14:30 Geneva on weekdays).":"No day-ahead prices for today in the current data.")+'</div>';$("pwHeatNote").textContent="";return;}
+ if(!any){$("pwHeat").innerHTML='<div class="pw-empty">'+(st.day==="tomorrow"?"Tomorrow's day-ahead prices are not published yet (auction results ~12:45 CET; this page refreshes ~14:30 Geneva daily).":"No day-ahead prices for today in the current data.")+'</div>';$("pwHeatNote").textContent="";return;}
  // hour columns from the longest record (23/24/25 h on DST days)
  const ref=recs.map(r=>r[1]).filter(Boolean).sort((a,b)=>b.h.length-a.h.length)[0];const t0=new Date(ref.t0).getTime();const nH=ref.h.length;
  let h='<table class="pw-heat"><thead><tr><th class="c-z">Zone</th>';for(let i=0;i<nH;i++)h+='<th>'+fhr.format(new Date(t0+i*36e5))+'</th>';h+='<th class="c-avg">Avg</th></tr></thead><tbody>';
- recs.forEach(([z,r])=>{h+='<tr'+(z===FOCUS?' class="focus"':'')+'><th class="c-z" scope="row">'+esc(z)+'</th>';if(!r){h+='<td colspan="'+(nH+1)+'" class="pw-nodata">n/a</td></tr>';return;}
+ recs.forEach(([z,r])=>{h+='<tr'+(z===FOCUS?' class="focus"':z===NEIGH[0]?' class="nb-first"':'')+'><th class="c-z" scope="row">'+esc(z)+'</th>';if(!r){h+='<td colspan="'+(nH+1)+'" class="pw-nodata">n/a</td></tr>';return;}
   const off=Math.round((new Date(r.t0).getTime()-t0)/36e5);
   for(let i=0;i<nH;i++){const v=r.h[i-off];if(!isNum(v)){h+='<td class="na-c">·</td>';continue;}h+='<td class="'+(v<0?"neg":"")+'" style="background:'+pcol(v)+';color:'+ink(v)+'" data-z="'+esc(z)+'" data-i="'+i+'">'+(v<0&&Math.round(v)===0?"−0":Math.round(v)<0?"−"+Math.abs(Math.round(v)):Math.round(v))+'</td>';}
   const a=isNum(r.avg)?r.avg:null;h+='<td class="c-avg"'+(isNum(a)?' style="background:'+pcol(a,.9)+';color:'+ink(a)+'"':"")+(r.full?"":' title="Incomplete day in source data"')+'>'+(isNum(a)?a.toFixed(1):"n/a")+'</td></tr>';});
@@ -191,7 +199,7 @@ function renderAvg(){const K=keys();const t=K.today,m=K.tomorrow;
  let h='<thead><tr><th class="c-z">Zone</th><th>Today</th><th>Tmrw</th><th title="Mean of the 7 delivery days ending today">7d</th><th title="Mean of the 30 delivery days ending today">30d</th><th title="Today\'s min and max (15-min or hourly resolution as published)">Min / max</th><th title="Number of negative-price periods today (15-min or hourly)">Neg.</th></tr></thead><tbody>';
  const row=(z,lab,cls)=>{const r=dayRec(z,t);const a=dayVal(z,t),b=dayVal(z,m),c=w7(z,t),d=w30(z,t);const cell=v=>'<td class="num"'+(isNum(v)?' style="--pc:'+pcol(v)+'"':"")+'>'+(isNum(v)?'<i class="pw-sw"></i>'+v.toFixed(1):NA)+'</td>';
   return'<tr class="'+(cls||"")+(z===FOCUS?" focus":"")+'"><th class="c-z" scope="row"'+(z==="NordicAvg"?' title="Unweighted mean of the 12 Nordic zones (needs all 12)"':"")+'>'+lab+'</th>'+cell(a)+cell(b)+cell(c)+cell(d)+'<td class="num mm">'+(r?'<span class="'+(r.min<0?"neg-t":"")+'">'+fpt(r.min,0)+'</span> / '+fpt(r.max,0):NA)+'</td><td class="num">'+(r?(r.neg?'<span class="neg-t">'+r.neg+(r.res===15?"×15m":"h")+'</span>':"0"):NA)+'</td></tr>';};
- SPOT.forEach(z=>h+=row(z,esc(z)));h+=row("NordicAvg","Nordic avg","sum");
+ SPOT.forEach(z=>h+=row(z,esc(z),z===NEIGH[0]?"nb-first":(NEIGH.includes(z)?"nb":"")));h+=row("NordicAvg","Nordic avg","sum");
  $("pwAvg").innerHTML=h+"</tbody>";
  const SP=[["SE4 − SE3","SE4","SE3"],["SE4 − DE-LU","SE4","DE-LU"],["SE2 − SE4","SE2","SE4"],["SE3 − FI","SE3","FI"],["NO2 − DE","NO2","DE-LU"],["Nordic avg − DE","NordicAvg","DE-LU"]];
  let s='<thead><tr><th class="c-z">Spread</th><th>Today</th><th>Tmrw</th><th>7d</th><th>30d</th></tr></thead><tbody>';
@@ -294,6 +302,8 @@ function renderFocusKpis(){const K=keys(),t=K.today,E=P.eex,z=FOCUS;let h="";
  const a=dayVal(z,t),r=dayRec(z,t),m=K.hasM?dayVal(z,K.tomorrow):null;
  h+=kpi(z+" spot · today",isNum(a)?fp(a)+'<small> EUR/MWh</small>':NA,(K.hasM?"tomorrow "+fpt(m):"tomorrow n/a yet")+(r?" · "+fpt(r.min,0)+"–"+fpt(r.max,0):""),"pw-f","SE4 day-ahead daily average for "+dlabel(t)+(r?"; min/max "+fpt(r.min)+" / "+fpt(r.max):""));
  h+=kpi(z+" 7d · 30d",isNum(w7(z,t))?fp(w7(z,t),1)+'<small> · '+fpt(w30(z,t),1)+'</small>':NA,"mean of delivery days ending today","pw-f");
+ {const R=E4(),C=R&&R.capture,c30=C&&C.d30&&C.d30.wind,c7=C&&C.d7&&C.d7.wind,ct=C&&C.today_fc&&C.today_fc.wind;
+  if(c30||c7)h+=kpi("Wind capture · 30d",c30?pct0(c30.rate)+'<small> · '+fpt(c30.cap,1)+' EUR</small>':NA,(c7?"7d "+pct0(c7.rate)+" ("+fpt(c7.cap,1)+")":"")+(ct?" · today exp. "+pct0(ct.rate):""),"pw-f"+(c30&&isNum(c30.rate)?(c30.rate<0.8?" pw-neg":""):""),"SE4 wind capture rate = wind-weighted day-ahead price ÷ baseload, last 30 complete days (computed from ENTSO-E A44 × A75). 7d = last 7 days; today expected = weighted by the day-ahead wind forecast.");}
  const s3=spreadV(z,"SE3",dayVal,t),s3w=spreadV(z,"SE3",w7,t);h+=kpi(z+" − SE3 · today",fs(s3),"7d "+fst(s3w)+(K.hasM?" · tmrw "+fst(spreadV(z,"SE3",dayVal,K.tomorrow)):""),"pw-f"+(isNum(s3)?(s3>0?" pw-pos":" pw-neg"):""),"Day-ahead daily average spread SE4 minus SE3 (congestion between southern and central Sweden)");
  const sd=spreadV(z,"DE-LU",dayVal,t),sdw=spreadV(z,"DE-LU",w7,t);h+=kpi(z+" − DE-LU · today",fs(sd),"7d "+fst(sdw)+(K.hasM?" · tmrw "+fst(spreadV(z,"DE-LU",dayVal,K.tomorrow)):""),"pw-f"+(isNum(sd)?(sd>0?" pw-pos":" pw-neg"):""),"Day-ahead daily average spread SE4 minus Germany-Luxembourg");
  if(E&&E.zones&&E.zones[z]){const zn=E.zones;[["M","front month"],["Y","front year"]].forEach(([b,lab])=>{const c=E.bench[b];const q=c&&zn[z][c];if(!q)return;const sys=zn.Nordic&&zn.Nordic[c];const ep=isNum(q.p)&&sys&&isNum(sys.p)?q.p-sys.p:null;
@@ -321,7 +331,7 @@ function renderSe4(){const K=keys(),z=FOCUS;const t=K.today;
  $("pwS4DayTitle").textContent=z+" vs SE3 and DE-LU · last "+ds.length+" days";
  lineChart($("pwS4Day"),{n:ds.length,series:dser,zero:true,h:240,label:"SE4 daily averages",xlab:i=>{const d=new Date(ds[i]+"T12:00:00Z");return d.toLocaleDateString("en-GB",{timeZone:"UTC",day:"numeric",month:"short"});},xw:54,
   tip:i=>'<b>'+esc(tdlabel(ds[i]))+'</b>'+dser.slice().reverse().map(s=>'<br><i class="pw-tk" style="background:'+s.color+'"></i>'+esc(s.name)+' <b>'+fpt(s.vals[i])+'</b>').join("")+(isNum(dser[2].vals[i])&&isNum(dser[1].vals[i])?'<br><span class="src">SE4 − SE3 '+fst(dser[2].vals[i]-dser[1].vals[i])+'</span>':"")});
- renderSe4Fw();renderSvk();renderGrid();}
+ renderSe4Fw();renderSvk();renderEntsoe();}
 function renderSe4Fw(){const E=P.eex,tb=$("pwS4Fw");if(!E||!E.zones||!E.zones[FOCUS]){tb.innerHTML='<tbody><tr><td class="pw-empty">EEX settlements not available</td></tr></tbody>';return;}
  const zn=E.zones,z=FOCUS;$("pwS4FwTitle").textContent="SE4 forwards · "+tdlabel(E.asof);
  const g=(q,c)=>zn[q]&&zn[q][c]&&isNum(zn[q][c].p)?zn[q][c].p:null;
@@ -335,15 +345,25 @@ const BORDER_COL={SE3:"var(--pw-sys)",DK2:"#b07cff","DE-LU":"var(--pw-de)",PL:"#
 function svkIdx(V){const t0=new Date(V.t0).getTime();const now=Date.now();const i=Math.floor((now-t0)/36e5);return{t0,n:V.n,now:i};}
 function lastIdx(a,upto){if(!a)return -1;for(let i=Math.min(a.length-1,upto==null?a.length-1:upto);i>=0;i--)if(isNum(a[i]))return i;return -1;}
 function dayMean(a,t0,k){if(!a)return null;const s=new Date(k+"T00:00:00");const vals=[];for(let i=0;i<a.length;i++){const d=fymd.format(new Date(t0+i*36e5));if(d===k&&isNum(a[i]))vals.push(a[i]);}return vals.length?mean(vals):null;}
-const dayTicks=(t0)=>i=>{const d=new Date(t0+i*36e5);return fhr.format(d)==="00"?dlabel(fymd.format(d)):null;};
+const fdnum=new Intl.DateTimeFormat("en-GB",{timeZone:TZ,day:"numeric"});
+const dayTicks=(t0)=>{const narrow=innerWidth<640;return i=>{const d=new Date(t0+i*36e5);return fhr.format(d)==="00"?(narrow?fdnum.format(d):dlabel(fymd.format(d))):null;};};
 function svkStats(items){return'<div class="pw-grid-stats">'+items.map(([a,b,c,t])=>'<div'+(t?' title="'+esc(t)+'"':"")+'><span>'+a+'</span><b>'+b+'</b><em>'+(c||"")+'</em></div>').join("")+'</div>';}
 function svkEmpty(box,label,title,msg){box.innerHTML='<div class="pw-card-head"><div><span class="panel-label">'+label+'</span><strong class="panel-title">'+title+'</strong></div></div><div class="pw-empty">'+msg+'</div>';}
+function entFlows(B2){const R=E4(),fl=R&&R.flows;if(!fl||!Object.keys(fl).length)return false;const t0=new Date(R.t0).getTime(),n=R.n,now=Math.floor((Date.now()-t0)/36e5),K=keys();
+ const order=["SE3","DK2","DE-LU","PL","LT"].filter(k=>fl[k]);const fs_=order.map(k=>({name:k,color:BORDER_COL[k]||"var(--muted)",w:k==="SE3"?2.4:1.6,vals:fl[k]}));
+ B2.innerHTML='<div class="pw-card-head"><div><span class="panel-label">ENTSO-E Transparency · A11</span><strong class="panel-title">SE4 physical flows · MW (+ into SE4)</strong></div><div class="pw-keys">'+keysHtml(fs_)+'</div></div>'+
+ '<div class="pw-tbl-wrap pw-flow-wrap"><table class="pw-tbl"><thead><tr><th class="c-z">Border</th><th>Latest</th><th>Today avg</th><th>7d avg</th></tr></thead><tbody>'+
+ order.map(k=>{const a=fl[k];const l=lastIdx(a,now);const c=v=>'<td class="num '+(isNum(v)?(v>=0?"imp":"exp"):"")+'">'+(isNum(v)?(v>=0?"+":"−")+fp(Math.abs(v),0):NA)+'</td>';return'<tr><th class="c-z">'+esc(k==="SE3"?"SE3 → SE4":"SE4 ↔ "+k)+'</th>'+c(l>=0?a[l]:null)+c(dayMean(a,t0,K.today))+c(mean(a.filter(isNum)))+'</tr>';}).join("")+'</tbody></table></div>'+
+ '<div class="pw-chart" id="pwS4FlowChart"></div><p class="pw-foot">Fallback source (Svenska kraftnät flows unavailable): ENTSO-E cross-border physical flows (A11), net into SE4 per border. Hourly means.</p>';
+ lineChart($("pwS4FlowChart"),{n,series:fs_,zero:true,h:200,label:"SE4 flows",xlab:dayTicks(t0),xall:true,tip:i=>'<b>'+esc(fdt.format(new Date(t0+i*36e5)))+'</b>'+fs_.map(s=>'<br><i class="pw-tk" style="background:'+s.color+'"></i>'+esc(s.name)+' <b>'+fst(s.vals[i],0)+'</b> MW').join("")});return true;}
 function renderSvk(){const V=P.svk;const B1=$("pwS4Svk"),B2=$("pwS4Flows"),B3=$("pwS4Mix");
- if(!V){[[B1,"SE4 load"],[B2,"SE4 cross-border flows"],[B3,"Sweden production"]].forEach(([b,t])=>svkEmpty(b,"Svenska kraftnät",t,"SVK data not available in this build."));return;}
+ const entLoad=renderLoadEnt(B1);
+ if(!V){[[B1,"SE4 load"],[B2,"SE4 cross-border flows"],[B3,"Sweden production"]].filter(([b])=>!(b===B1&&entLoad)).forEach(([b,t])=>svkEmpty(b,"Svenska kraftnät",t,"SVK data not available in this build."));if(!entFlows(B2))0;return;}
  const{t0,n,now}=svkIdx(V),K=keys(),Z4=(V.zones||{})[FOCUS]||{};
  // 1) SE4 load (outcome + forecast) and solar plan
  const ser=[];if(Z4.load_plan)ser.push({name:"Load forecast",color:COL.de,w:1.4,dash:"4 3",vals:Z4.load_plan});if(Z4.load)ser.push({name:"Load",color:COL.zone,w:2.4,end:true,vals:Z4.load});if(Z4.solar_plan)ser.push({name:"Solar plan",color:"#e2c454",w:1.6,vals:Z4.solar_plan});
- if(!ser.length)svkEmpty(B1,"Svenska kraftnät · Kontrollrummet","SE4 load","n/a");
+ if(entLoad){}
+ else if(!ser.length)svkEmpty(B1,"Svenska kraftnät · Kontrollrummet","SE4 load","n/a");
  else{const li=lastIdx(Z4.load,now);const lt=dayMean(Z4.load,t0,K.today),lp=dayMean(Z4.load_plan,t0,K.today),sp=Z4.solar_plan?Math.max(...Z4.solar_plan.filter(isNum).concat([0])):null;
   const fl=V.flows_se4||{};const ni=lastIdx(Object.values(fl)[0],now);const net=ni>=0?Object.values(fl).reduce((a,v)=>a+(isNum(v[ni])?v[ni]:0),0):null;
   B1.innerHTML='<div class="pw-card-head"><div><span class="panel-label">Svenska kraftnät · Kontrollrummet</span><strong class="panel-title">SE4 load · hourly MW</strong></div><div class="pw-keys">'+ser.slice().reverse().map(s=>'<span class="pw-key"><i style="background:'+s.color+'"></i>'+esc(s.name)+'</span>').join("")+'</div></div>'+
@@ -352,7 +372,7 @@ function renderSvk(){const V=P.svk;const B1=$("pwS4Svk"),B2=$("pwS4Flows"),B3=$(
   lineChart($("pwS4SvkChart"),{n,series:ser,h:210,label:"SE4 load",xlab:dayTicks(t0),xall:true,tip:i=>'<b>'+esc(fdt.format(new Date(t0+i*36e5)))+'</b>'+ser.slice().reverse().map(s=>'<br><i class="pw-tk" style="background:'+s.color+'"></i>'+esc(s.name)+' <b>'+fpt(s.vals[i],0)+'</b> MW').join("")});}
  // 2) SE4 flows per border (positive = import into SE4)
  const fl=V.flows_se4;
- if(!fl||!Object.keys(fl).length)svkEmpty(B2,"Svenska kraftnät · data.svk.se","SE4 cross-border flows","n/a");
+ if(!fl||!Object.keys(fl).length){if(!entFlows(B2))svkEmpty(B2,"Svenska kraftnät · data.svk.se","SE4 cross-border flows","n/a");}
  else{const order=["SE3","DK2","DE-LU","PL","LT"].filter(k=>fl[k]).concat(Object.keys(fl).filter(k=>!["SE3","DK2","DE-LU","PL","LT"].includes(k)));
   const fs_=order.map(k=>({name:k,color:BORDER_COL[k]||"var(--muted)",w:k==="SE3"?2.4:1.6,vals:fl[k]}));
   const li=lastIdx(fl[order[0]],now);
@@ -378,22 +398,86 @@ function renderSvk(){const V=P.svk;const B1=$("pwS4Svk"),B2=$("pwS4Flows"),B3=$(
  h+='<div class="pw-chart" id="pwS4MixChart"></div><p class="pw-foot">Production by type is published for Sweden as a whole (no bidding-area split at source) and is based on operators\' reported schedules, not settled outcome.</p>';
  B3.innerHTML=h;$("pwMixKeys").innerHTML=mser.map(s=>'<span class="pw-key"><i style="background:'+s.color+'"></i>'+esc(s.name)+'</span>').join("");
  if(mser.length)lineChart($("pwS4MixChart"),{n,series:mser,h:190,label:"Sweden production",xlab:dayTicks(t0),xall:true,tip:i=>'<b>'+esc(fdt.format(new Date(t0+i*36e5)))+'</b>'+mser.map(s=>'<br><i class="pw-tk" style="background:'+s.color+'"></i>'+esc(s.name)+' <b>'+fpt(s.vals[i],0)+'</b> MW').join("")});}
-/* ENTSO-E (optional): load, wind and generation for SE4 when the build had an ENTSOE_API_TOKEN */
-function renderGrid(){const box=$("pwS4Grid");const N=P.entsoe,R=N&&N.enabled&&N.zones&&N.zones[FOCUS];
- const head='<div class="pw-card-head"><div><span class="panel-label">ENTSO-E · hourly MW</span><strong class="panel-title">SE4 wind, generation and load</strong></div><div class="pw-keys" id="pwGridKeys"></div></div>';
- if(!R||!R.series){box.hidden=true;box.innerHTML="";return;}box.hidden=false;
- const S=R.series,t0=new Date(R.t0).getTime(),n=Math.max(...Object.values(S).map(a=>a.length));
- const pick=[["load","Load",COL.de,2,null],["load_fc","Load forecast",COL.de,1.3,"4 3"],["gen_total","Generation",COL.sys,1.6,null],["gen_wind_on","Wind (actual)",COL.wind,2.4,null],["fc_wind_on","Wind forecast",COL.wind,1.4,"4 3"]];
- const ser=pick.filter(p=>S[p[0]]&&S[p[0]].some(isNum)).map(([k,l,c,w,d])=>({name:l,color:c,w,dash:d,vals:S[k]}));
- // today's stats and computed wind capture price (wind-weighted day-ahead average) where both series exist
- const K=keys(),rt=dayRec(FOCUS,K.today);let stat="";
- if(rt){const off=Math.round((new Date(rt.t0).getTime()-t0)/36e5);const wv=S.gen_wind_on||S.fc_wind_on,lv=S.load||S.load_fc;let sw=0,swp=0,sl=0,nw=0;
-  rt.h.forEach((p,i)=>{const w=wv&&wv[off+i],l=lv&&lv[off+i];if(isNum(w)&&isNum(p)){sw+=w;swp+=w*p;nw++;}if(isNum(l))sl+=l;});
-  const cap=sw>0?swp/sw:null,base=rt.avg;stat='<div class="pw-grid-stats">'+[["Wind today",nw?fp(sw/nw,0)+' MW':NA,"mean hourly"],["Load today",sl?fp(sl/rt.h.length,0)+' MW':NA,"mean hourly"],["Wind share",sl&&sw?fp(sw/sl*100,0)+"%":NA,"wind ÷ load"],["Wind capture",isNum(cap)?fp(cap,1):NA,isNum(cap)&&isNum(base)&&base?Math.round(cap/base*100)+"% of baseload":"wind-weighted DA"]].map(([a,b,c])=>'<div><span>'+a+'</span><b>'+b+'</b><em>'+c+'</em></div>').join("")+'</div>';}
- box.innerHTML=head+stat+'<div class="pw-chart" id="pwGridChart"></div><p class="pw-foot">ENTSO-E Transparency Platform; hourly means. Capture = wind-weighted day-ahead average (computed here).</p>';
- $("pwGridKeys").innerHTML=ser.map(s=>'<span class="pw-key"><i style="background:'+s.color+'"></i>'+esc(s.name)+'</span>').join("");
- lineChart($("pwGridChart"),{n,series:ser,h:220,label:"SE4 load and wind",xlab:i=>{const d=new Date(t0+i*36e5);return fhr.format(d)==="00"?dlabel(fymd.format(d)):null;},xall:true,
-  tip:i=>'<b>'+esc(fdt.format(new Date(t0+i*36e5)))+'</b>'+ser.map(s=>'<br><i class="pw-tk" style="background:'+s.color+'"></i>'+esc(s.name)+' <b>'+fpt(s.vals[i],0)+'</b> MW').join("")});}
+/* ---------- ENTSO-E Transparency: SE4 wind, value of wind, load, outages; reservoirs (Drivers) ---------- */
+const EN=()=>P.entsoe&&P.entsoe.enabled?P.entsoe:null;
+const E4=()=>{const e=EN();return e&&e.se4&&e.se4.t0?e.se4:null;};
+const SOLAR_C="#e2c454";
+const keysHtml=ser=>ser.map(s=>'<span class="pw-key"><i style="background:'+s.color+(s.dash?';opacity:.6':'')+'"></i>'+esc(s.name)+'</span>').join("");
+const tipRows=(ser,i,d=0,u=" MW")=>ser.map(s=>'<br><i class="pw-tk" style="background:'+s.color+'"></i>'+esc(s.name)+' <b>'+fpt(s.vals[i],d)+'</b>'+u).join("");
+const pct0=v=>isNum(v)?Math.round(v*100)+"%":"n/a";
+function entHead(label,title,keys){return'<div class="pw-card-head"><div><span class="panel-label">'+label+'</span><strong class="panel-title">'+title+'</strong></div>'+(keys!=null?'<div class="pw-keys">'+keys+'</div>':"")+'</div>';}
+function staleNote(k){const e=EN();return e&&(e.stale||[]).includes(k)?' <span class="na">(kept from an earlier build: this part failed at the last update)</span>':"";}
+function renderWind(){const box=$("pwS4Wind"),R=E4(),S=R&&R.series;
+ if(!S||!(S.wind||S.wind_fc)){box.hidden=true;box.innerHTML="";return;}box.hidden=false;
+ const t0=new Date(R.t0).getTime(),n=R.n,now=Math.floor((Date.now()-t0)/36e5),K=keys();
+ const ser=[];if(S.solar_fc)ser.push({name:"Solar · DA forecast",color:SOLAR_C,w:1.2,dash:"4 3",op:.8,vals:S.solar_fc});if(S.solar)ser.push({name:"Solar · actual",color:SOLAR_C,w:1.6,vals:S.solar});
+ if(S.wind_fc)ser.push({name:"Wind · DA forecast",color:COL.wind,w:1.5,dash:"5 3",op:.85,vals:S.wind_fc});if(S.wind)ser.push({name:"Wind · actual",color:COL.wind,w:2.6,end:true,vals:S.wind});
+ const li=lastIdx(S.wind,now),wt=dayMean(S.wind_fc,t0,K.today),wa=dayMean(S.wind,t0,K.today),wm=dayMean(S.wind_fc,t0,K.tomorrow),er=R.wind_err;
+ const stats=[["Wind latest",li>=0?fp(S.wind[li],0)+" MW":NA,li>=0?fhr.format(new Date(t0+li*36e5))+":00 Geneva · actual":"","Latest actual hourly wind generation in SE4 (ENTSO-E A75)"],
+  ["Today · forecast",isNum(wt)?fp(wt,0)+" MW":NA,isNum(wa)?"actual so far "+fp(wa,0)+" MW":"mean of the day","Day-ahead wind forecast (A69), mean MW over today"],
+  ["Tomorrow · forecast",isNum(wm)?fp(wm,0)+" MW":NA,isNum(wm)?"mean of the day":"published the afternoon before","Day-ahead wind forecast for tomorrow (A69); appears after it is published, typically late afternoon the day before"],
+  ["DA forecast error",er?fp(er.mae,0)+" MW":NA,er?"MAE 7d · "+(er.mean?Math.round(er.mae/er.mean*100)+"% of mean · ":"")+(er.bias<0?"under":"over")+"-forecast "+fp(Math.abs(er.bias),0):"","Mean absolute error of the hourly day-ahead wind forecast vs actual over the last 7 complete days; bias = mean(forecast − actual)"]];
+ box.innerHTML=entHead("ENTSO-E Transparency · hourly MW","SE4 wind &amp; solar · actual vs day-ahead forecast",keysHtml(ser.slice().reverse()))+svkStats(stats)+'<div class="pw-chart" id="pwS4WindChart"></div>'+
+  '<p class="pw-foot">Actual generation per type (A75) vs the TSO\'s <b>day-ahead</b> wind and solar forecast (A69). A69 is a short-horizon forecast published the day before delivery (it covers today and, once published, tomorrow); it is not a multi-week outlook. Hourly means of 15-min values; times Geneva.'+staleNote("series")+'</p>';
+ lineChart($("pwS4WindChart"),{n,series:ser,h:230,label:"SE4 wind actual vs forecast",xlab:dayTicks(t0),xall:true,band:null,
+  tip:i=>'<b>'+esc(fdt.format(new Date(t0+i*36e5)))+'</b>'+tipRows(ser.slice().reverse(),i)+(isNum(S.wind&&S.wind[i])&&isNum(S.wind_fc&&S.wind_fc[i])?'<br><span class="src">forecast − actual '+fst(S.wind_fc[i]-S.wind[i],0)+' MW</span>':"")});}
+function renderValue(){const box=$("pwS4Value"),R=E4(),C=R&&R.capture,D=R&&R.daily;
+ if(!C&&!(D&&D.length)){box.hidden=true;box.innerHTML="";return;}box.hidden=false;
+ const rows=[["Last 7 days","d7","actual"],["Last 30 days","d30","actual"],["Today","today_fc","expected"],["Tomorrow","tomorrow_fc","expected"]];
+ const cell=x=>x?'<td class="num">'+fp(x.cap,1)+'</td><td class="num"><span class="pw-rate'+(isNum(x.rate)?(x.rate<0.8?" lo":x.rate>=0.95?" hi":""):"")+'">'+pct0(x.rate)+'</span></td>':'<td class="num">'+NA+'</td><td class="num">'+NA+'</td>';
+ let t='<div class="pw-tbl-wrap pw-pad"><table class="pw-tbl pw-cap"><thead><tr><th class="c-z">Period</th><th title="Time-average day-ahead price over the same periods">Baseload</th><th title="Wind-weighted day-ahead price">Wind capture</th><th title="Wind capture ÷ baseload">Rate</th><th title="Solar-weighted day-ahead price">Solar capture</th><th>Rate</th></tr></thead><tbody>';
+ rows.forEach(([l,k,kind])=>{const r=C&&C[k];if(!r&&kind==="expected"&&k==="tomorrow_fc"){t+='<tr class="pw-dim"><th class="c-z" scope="row">'+l+' <em>expected</em></th><td class="num" colspan="5"><span class="na">needs tomorrow\'s prices and wind forecast</span></td></tr>';return;}
+  const w=r&&r.wind,s=r&&r.solar;t+='<tr'+(kind==="expected"?' class="pw-exp"':"")+'><th class="c-z" scope="row">'+l+(kind==="expected"?' <em title="Weighted by the day-ahead wind forecast (A69), not by actual output">expected</em>':"")+'</th><td class="num">'+fp((w||s||{}).base,1)+'</td>'+cell(w)+cell(s)+'</tr>';});
+ t+='</tbody></table></div>';
+ const c30=C&&C.d30&&C.d30.wind,c7=C&&C.d7&&C.d7.wind;
+ const stats=[["Wind capture · 30d",c30?fp(c30.cap,1):NA,c30?pct0(c30.rate)+" of baseload "+fpt(c30.base,1):"","EUR/MWh"],["Wind capture · 7d",c7?fp(c7.cap,1):NA,c7?pct0(c7.rate)+" of baseload "+fpt(c7.base,1):"","EUR/MWh"]];
+ let ch="",ser=[];if(D&&D.length){ser=[{name:"Baseload",color:COL.sys,w:1.6,vals:D.map(r=>r[1])},{name:"Wind capture",color:COL.wind,w:2.6,end:true,vals:D.map(r=>r[2])}];ch='<div class="pw-mini-h pw-pad">Daily · EUR/MWh <em>last '+D.length+' complete days</em></div><div class="pw-chart" id="pwS4ValueChart"></div>';}
+ box.innerHTML=entHead("ENTSO-E · computed","Value of wind · SE4 capture price",ser.length?keysHtml(ser.slice().reverse()):"")+'<div class="pw-grid-stats pw-stats-2">'+stats.map(([a,b,c,u])=>'<div><span>'+a+'</span><b>'+b+(b!==NA?'<small> '+u+'</small>':"")+'</b><em>'+c+'</em></div>').join("")+'</div>'+t+ch+
+  '<p class="pw-foot">Capture price = Σ(price × MW) ÷ Σ(MW) over 15-min periods, using ENTSO-E day-ahead prices (A44) and actual generation (A75); rate = capture ÷ baseload over the same periods. “Expected” uses the day-ahead forecast (A69) instead of actual output. Computed here, not a published series.'+staleNote("capture")+'</p>';
+ if(ser.length)lineChart($("pwS4ValueChart"),{n:D.length,series:ser,zero:true,h:190,label:"SE4 baseload vs wind capture",xw:54,xlab:i=>{const d=new Date(D[i][0]+"T12:00:00Z");return d.toLocaleDateString("en-GB",{timeZone:"UTC",day:"numeric",month:"short"});},
+  tip:i=>{const r=D[i];return'<b>'+esc(tdlabel(r[0]))+'</b>'+tipRows(ser.slice().reverse(),i,1," EUR/MWh")+'<br><span class="src">rate '+(isNum(r[1])&&isNum(r[2])&&r[1]>0?Math.round(r[2]/r[1]*100)+"%":"n/a")+' · wind avg '+fpt(r[3],0)+' MW'+(isNum(r[4])?' · solar capture '+fpt(r[4],1):"")+'</span>';}});}
+function renderLoadEnt(box){const R=E4(),S=R&&R.series;if(!S||!S.load)return false;
+ const t0=new Date(R.t0).getTime(),n=R.n,now=Math.floor((Date.now()-t0)/36e5),K=keys();
+ const res=S.load.map((l,i)=>isNum(l)&&isNum(S.wind&&S.wind[i])?l-S.wind[i]-(isNum(S.solar&&S.solar[i])?S.solar[i]:0):null);
+ const ser=[];if(S.load_fc)ser.push({name:"Load · DA forecast",color:COL.de,w:1.4,dash:"4 3",vals:S.load_fc});ser.push({name:"Load · actual",color:COL.zone,w:2.4,end:true,vals:S.load});ser.push({name:"Residual (load − wind − solar)",color:COL.sys,w:1.5,vals:res});
+ const li=lastIdx(S.load,now),lt=dayMean(S.load,t0,K.today),lf=dayMean(S.load_fc,t0,K.today),ri=lastIdx(res,now),W=R.load_week||[];const pk=W.length?Math.max(...W.map(r=>r[2]).filter(isNum)):null;
+ box.innerHTML=entHead("ENTSO-E Transparency · hourly MW","SE4 load · actual vs forecast",keysHtml(ser.slice().reverse()))+
+  svkStats([["Load latest",li>=0?fp(S.load[li],0)+" MW":NA,li>=0?fhr.format(new Date(t0+li*36e5))+":00 Geneva":"","Actual total load SE4 (A65)"],["Load today",isNum(lt)?fp(lt,0)+" MW":NA,isNum(lf)?"DA forecast "+fp(lf,0):"mean so far","Mean of today's hourly actual load vs the day-ahead load forecast (A65, A01)"],["Residual latest",ri>=0?fp(res[ri],0)+" MW":NA,"load − wind − solar","What other generation and imports have to cover"],["Week-ahead peak",isNum(pk)?fp(pk,0)+" MW":NA,W.length?"next "+W.length+" days":"","Week-ahead load forecast (A65, A31): daily maximum"]])+
+  '<div class="pw-chart" id="pwS4LoadChart"></div>'+
+  (W.length?'<div class="pw-mini-h pw-pad">Week-ahead load forecast <em>daily min – max, MW (A65 week-ahead)</em></div><div class="pw-wk pw-pad">'+W.map(r=>'<div><span>'+esc(dlabel(r[0]))+'</span><b>'+fpt(r[1],0)+'–'+fpt(r[2],0)+'</b></div>').join("")+'</div>':"")+
+  '<p class="pw-foot">Actual total load and the day-ahead load forecast (A65). Hourly means; times Geneva.'+staleNote("series")+'</p>';
+ lineChart($("pwS4LoadChart"),{n,series:ser,h:200,label:"SE4 load",xlab:dayTicks(t0),xall:true,tip:i=>'<b>'+esc(fdt.format(new Date(t0+i*36e5)))+'</b>'+tipRows(ser.slice().reverse(),i)});return true;}
+const fwd=new Intl.DateTimeFormat("en-GB",{timeZone:TZ,day:"2-digit",month:"short"}),fwt=new Intl.DateTimeFormat("en-GB",{timeZone:TZ,hour:"2-digit",minute:"2-digit",hour12:false});
+const fwinH=iso=>{const d=new Date(iso);return esc(fwd.format(d).replace("Sept","Sep"))+'<span class="pw-t"> '+esc(fwt.format(d))+'</span>';};
+function renderOutages(){const box=$("pwS4Out"),R=E4();const tx=R&&R.outages_tx,gen=R&&R.outages_gen;
+ if(!R||(!tx&&!gen)){box.hidden=true;box.innerHTML="";return;}box.hidden=false;
+ const PS={wind:"Wind",solar:"Solar",nuclear:"Nuclear",hydro:"Hydro",gas:"Gas",coal:"Coal",oil:"Oil",biomass:"Biomass",waste:"Waste",other:"Other"};
+ let h=entHead("ENTSO-E Transparency · unavailability","SE4 outages",null);
+ h+='<div class="pw-mini-h pw-pad">Interconnectors <em>reported unavailabilities, now and next 30 days</em></div>';
+ if(tx&&tx.length){h+='<div class="pw-tbl-wrap pw-pad"><table class="pw-tbl pw-out"><thead><tr><th class="c-z">Direction</th><th title="Remaining cross-border capacity in this direction during the event">Avail. MW</th><th>Window <span class="pw-mut">(Geneva)</span></th><th>Type</th></tr></thead><tbody>'+
+  tx.map(r=>'<tr class="'+(r.now?"is-now":"")+'"><th class="c-z" scope="row"><i class="pw-now" title="'+(r.now?"In effect now":"Upcoming")+'"></i>'+esc(r.frm)+' → '+esc(r.to)+'</th><td class="num">'+fp(r.avail,0)+'</td><td class="num">'+fwinH(r.start)+' → '+fwinH(r.end)+'</td><td><span class="pw-pill '+(r.type==="forced"?"forced":"")+'">'+esc(r.type)+'</span></td></tr>').join("")+'</tbody></table></div>';}
+ else h+='<div class="pw-empty pw-empty-s">No interconnector unavailability reported for SE4 borders.</div>';
+ h+='<div class="pw-mini-h pw-pad">Generation units in SE4 <em>aggregated by fuel, next 7 days</em></div>';
+ if(gen&&gen.length){h+='<div class="pw-tbl-wrap pw-pad"><table class="pw-tbl pw-out"><thead><tr><th class="c-z">Fuel</th><th>Out now</th><th title="Sum of the largest unavailable capacity per event starting or running in the next 7 days">Next 7 days</th><th>Planned / forced</th></tr></thead><tbody>'+
+  gen.map(r=>'<tr><th class="c-z" scope="row">'+esc(PS[r.type]||r.type)+'</th><td class="num">'+(r.now_mw?fp(r.now_mw,0)+' MW <span class="pw-mut">('+r.now_n+')</span>':"0")+'</td><td class="num">'+fp(r.wk_mw,0)+' MW <span class="pw-mut">('+r.wk_n+')</span></td><td class="num">'+r.planned+' / '+r.forced+'</td></tr>').join("")+'</tbody></table></div>';}
+ else h+='<div class="pw-empty pw-empty-s">No generation-unit unavailability reported for SE4.</div>';
+ h+='<p class="pw-foot"><i class="pw-now on"></i> = in effect now. Planned and forced unavailabilities published on the ENTSO-E Transparency Platform (A78 transmission, A80 generation units); unit, plant and line names are not shown. Avail. MW = capacity left in that direction during the event. Times Geneva.'+staleNote("outages_tx")+'</p>';
+ box.innerHTML=h;}
+function renderReservoirs(){const box=$("pwRes"),e=EN(),RS=e&&e.reservoirs;
+ if(!RS||!Object.keys(RS).length){box.hidden=true;box.innerHTML="";return;}box.hidden=false;
+ const fmtE=v=>!isNum(v)?NA:Math.abs(v)>=1000?(v/1000).toFixed(1)+'<small> TWh</small>':Math.round(v)+'<small> GWh</small>';
+ const fmtD=v=>!isNum(v)?NA:(v>0?"+":v<0?"−":"")+(Math.abs(v)>=1000?(Math.abs(v)/1000).toFixed(2)+" TWh":Math.round(Math.abs(v))+" GWh");
+ const agg=zs=>{const have=zs.filter(z=>RS[z]);if(have.length!==zs.length)return null;const w=RS[have[0]].w;if(!have.every(z=>RS[z].w.join()===w.join()))return null;
+  const sum=k=>w.map((_,i)=>{const v=have.map(z=>RS[z][k][i]);return v.every(isNum)?v.reduce((a,b)=>a+b,0):null;});return{w,v:sum("v"),ly:sum("ly")};};
+ const rows=[["SE1",RS.SE1],["SE2",RS.SE2],["SE3",RS.SE3],["SE4",RS.SE4],["Sweden",agg(SE_Z),"sum"],["NO1",RS.NO1],["NO2",RS.NO2],["NO3",RS.NO3],["NO4",RS.NO4],["NO5",RS.NO5],["Norway",agg(["NO1","NO2","NO3","NO4","NO5"]),"sum"]].filter(r=>r[1]);
+ let wk=null;rows.forEach(([,r])=>{const d=r.w[r.w.length-1];if(!wk||d>wk)wk=d;});
+ let h=entHead("ENTSO-E Transparency · weekly","Hydro reservoirs · stored energy",'<span class="pw-key">week of '+esc(dlabel(wk))+'</span>');
+ h+='<div class="pw-tbl-wrap pw-pad"><table class="pw-tbl pw-res"><thead><tr><th class="c-z">Zone</th><th>Stored</th><th title="Change vs the previous week">w/w</th><th title="Same week one year earlier">vs last year</th><th class="c-spark">52 weeks</th></tr></thead><tbody>';
+ rows.forEach(([z,r,cls])=>{const n=r.v.length,v=r.v[n-1],p=r.v[n-2],ly=r.ly[n-1];const dw=isNum(v)&&isNum(p)?v-p:null,dy=isNum(v)&&isNum(ly)?v-ly:null,py=isNum(dy)&&ly?dy/ly*100:null;
+  h+='<tr class="'+(cls||"")+(z===FOCUS?" focus":"")+'"><th class="c-z" scope="row">'+esc(z)+'</th><td class="num">'+fmtE(v)+'</td><td class="num '+(isNum(dw)?(dw<0?"dn":"up"):"")+'">'+fmtD(dw)+'</td><td class="num '+(isNum(dy)?(dy<0?"dn":"up"):"")+'">'+fmtD(dy)+(isNum(py)?' <span class="pw-mut">('+(py>0?"+":"−")+Math.abs(py).toFixed(0)+'%)</span>':"")+'</td><td class="c-spark">'+sparkSvg(r.v.slice(-52),96,24)+'</td></tr>';});
+ h+='</tbody></table></div><p class="pw-foot">Weekly aggregated filling of water reservoirs and hydro storage plants (A72), energy stored at week end. Complements NVE (Norway, % with history band) and Energiföretagen (Sweden) above.'+staleNote("reservoirs")+'</p>';
+ box.innerHTML=h;}
+function renderEntsoe(){renderWind();renderValue();renderOutages();}
 
 /* ---------- sticky sub-navigation (static #pwSubnav in index.html) ---------- */
 const NAV=[["pwSecSpot","Spot"],["pwSecFw","Forwards"],["pwSecDrv","Drivers"],["pwSecSE4","SE4"],["pwNews","News"]];
@@ -408,16 +492,17 @@ function spy(){const nav=$("pwSubnav");if(!nav)return;const lim=nav.offsetHeight
  nav.querySelectorAll("a").forEach(a=>{const on=a.dataset.t===cur;a.classList.toggle("is-on",on);if(on)a.setAttribute("aria-current","true");else a.removeAttribute("aria-current");});}
 
 /* ---------- credits ---------- */
-function renderCredits(){const sp=P.spot,srcs=(sp&&sp.sources)||[];const fail=(sp&&sp.status||[]).filter(x=>!x.ok&&x.src==="Energy-Charts");
+function renderCredits(){const sp=P.spot,srcs=(sp&&sp.sources)||[];const fail=(sp&&sp.status||[]).filter(x=>!x.ok&&x.src==="Energy-Charts"&&!(sp.zones&&sp.zones[x.zone]&&sp.zones[x.zone].src));
  $("pwCredits").innerHTML='Sources: forwards and drivers from <b>EEX</b> public daily settlements (API2 coal: ICE), collected by a daily scraper since 1 Sep 2026. Day-ahead: '+
- '<a href="https://www.energy-charts.info" target="_blank" rel="noopener noreferrer">Energy-Charts</a> (Fraunhofer ISE, <a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noopener noreferrer">CC BY 4.0</a>)'+
+ (srcs.includes("ENTSO-E")?'<a href="https://transparency.entsoe.eu" target="_blank" rel="noopener noreferrer">ENTSO-E Transparency Platform</a> (A44)'+(srcs.length>1?', ':''):'')+
+ (srcs.includes("Energy-Charts")||!srcs.length?'<a href="https://www.energy-charts.info" target="_blank" rel="noopener noreferrer">Energy-Charts</a> (Fraunhofer ISE, <a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noopener noreferrer">CC BY 4.0</a>)':'')+
  (srcs.includes("Energi Data Service")?', <a href="https://www.energidataservice.dk" target="_blank" rel="noopener noreferrer">Energi Data Service</a> (Energinet)':"")+(srcs.includes("spot-hinta.fi")?', <a href="https://spot-hinta.fi" target="_blank" rel="noopener noreferrer">spot-hinta.fi</a>':"")+
- (fail.length?' <span class="na">(Energy-Charts unavailable at last build for '+fail.length+' zone(s); fallback sources used where possible)</span>':"")+'. '+
- 'Hydro: <a href="https://www.nve.no/energi/analyser-og-statistikk/magasinstatistikk/" target="_blank" rel="noopener noreferrer">NVE magasinstatistikk</a> (NLOD); Sweden: <a href="https://www.energiforetagen.se/statistik/kraftlaget/" target="_blank" rel="noopener noreferrer">Energiföretagen</a>. '+
- (P.svk?'SE4 load, flows and Sweden production: <a href="https://www.svk.se/om-kraftsystemet/kontrollrummet/" target="_blank" rel="noopener noreferrer">Svenska kraftnät Kontrollrummet</a> and <a href="https://data.svk.se" target="_blank" rel="noopener noreferrer">data.svk.se</a> (CC BY 4.0). ':'')+(P.entsoe&&P.entsoe.enabled?'SE4 load / generation / wind: <a href="https://transparency.entsoe.eu" target="_blank" rel="noopener noreferrer">ENTSO-E Transparency Platform</a>. ':'')+'Zone outlines simplified from ENTSO-E bidding-zone shapes (entsoe-py, MIT). Day-ahead days follow the CET delivery day; times are Geneva time. Nordic avg is an unweighted mean of 12 zones, not the Nord Pool system price. n/a = not available from source.';}
+ (fail.length?' <span class="na">(primary source unavailable at last build for '+fail.length+' zone(s); fallback sources used where possible)</span>':"")+'. '+
+ (P.capture&&P.capture.zones&&Object.keys(P.capture.zones).length?'FI / DE-LU capture prices use Energy-Charts generation (CC BY 4.0). ':'')+'Hydro: <a href="https://www.nve.no/energi/analyser-og-statistikk/magasinstatistikk/" target="_blank" rel="noopener noreferrer">NVE magasinstatistikk</a> (NLOD); Sweden: <a href="https://www.energiforetagen.se/statistik/kraftlaget/" target="_blank" rel="noopener noreferrer">Energiföretagen</a>. '+
+ (P.svk?'SE4 load, flows and Sweden production: <a href="https://www.svk.se/om-kraftsystemet/kontrollrummet/" target="_blank" rel="noopener noreferrer">Svenska kraftnät Kontrollrummet</a> and <a href="https://data.svk.se" target="_blank" rel="noopener noreferrer">data.svk.se</a> (CC BY 4.0). ':'')+(EN()?'SE4 wind and solar (actual A75, day-ahead forecast A69), load (A65), flows (A11), outages (A78/A80) and reservoirs (A72): <a href="https://transparency.entsoe.eu" target="_blank" rel="noopener noreferrer">ENTSO-E Transparency Platform</a>; capture prices computed here. ':'')+'Zone outlines simplified from ENTSO-E bidding-zone shapes (entsoe-py, MIT). Day-ahead days follow the CET delivery day; times are Geneva time. Nordic avg is an unweighted mean of 12 zones, not the Nord Pool system price. n/a = not available from source.';}
 
 /* ---------- main ---------- */
-function renderAll(){if(!P)return;initNav();renderFocusKpis();renderKpis();renderDA();renderFw();renderDrivers();renderHydro();renderSe4();renderCredits();spy();}
+function renderAll(){if(!P)return;initNav();renderFocusKpis();renderKpis();renderDA();renderFw();renderDrivers();renderHydro();renderReservoirs();renderSe4();renderCredits();spy();}
 async function load(force){if(loading&&!force)return loading;const v=$("powerView");if(!P)v.innerHTML='<div class="pw-empty pw-loading">Loading Nordic power data…</div>';
  loading=(async()=>{try{const r=await fetch("data/power.json?t="+Math.floor(Date.now()/6e4),{cache:"no-cache"});if(!r.ok)throw Error("HTTP "+r.status);P=await r.json();shell();renderAll();}
   catch(e){if(!P)v.innerHTML='<div class="pw-empty">Could not load data/power.json ('+esc(e.message)+'). If you opened the file directly, serve the folder over HTTP.</div>';}finally{loading=null;}})();return loading;}
