@@ -72,8 +72,9 @@ news only), and on demand, and commits:
     400/min limit, retried on 429/5xx; failed parts keep the previous values. The token is never logged.
   - Hydro: NVE magasinstatistikk API (Norway and NO1–NO5, weekly) and the Energiföretagen weekly PDF (Sweden snapshot).
   - FI / DE-LU capture prices use Energy-Charts generation.
-  - Schedule: power runs at 05:30 and 12:30 UTC on weekdays (12:30 captures tomorrow's day-ahead prices) and at 12:30
-    UTC on Saturdays and Sundays.
+  - Schedule: power runs at 05:30 and 12:30 UTC on weekdays (12:30 captures tomorrow's day-ahead prices), at 12:30
+    UTC on Saturdays and Sundays, and daily at 17:30 UTC, after the D-1 18:00 Brussels deadline for the day-ahead
+    wind/solar forecast (A69), so the SE4 "tomorrow expected" capture row fills in.
 
 Local run: `pip install -r scripts/requirements.txt && python scripts/build_data.py && python scripts/build_news.py && python scripts/build_power.py && python scripts/build_symbols.py && python scripts/build_companies.py`,
 then `python -m http.server` and open http://localhost:8000/.
