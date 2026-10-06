@@ -61,7 +61,7 @@ const COLS=[
  {k:"px",g:"",l:"Last",cls:"num c-px",t:"Latest Yahoo quote, local currency (~15 min delayed), refreshed every 15 min in market hours. Grey: time of the last quote (Geneva) while the market is open, otherwise the date of the last close."},
  {k:"mcap",g:"",l:"Mkt cap €",cls:"num c-mcap",t:"Market capitalization converted to EUR (Yahoo; FX from Yahoo EUR crosses or ECB mid). Hover for original currency."},
  {k:"ev",g:"",l:"EV €",cls:"num c-ev",t:"Enterprise value converted to EUR when Yahoo provides it. Hover for original currency."},
- {k:"spark",g:"price",l:"1Y",t:"1-year daily close sparkline (sorts by 1Y %)",cls:"c-spark"},
+ {k:"spark",g:"price",l:"1Y",t:"1-year line of daily closes (Yahoo) in the quote currency; yields in %, indices in points. Hover a line for the 1Y change, high and low. Sorts by 1Y %.",cls:"c-spark"},
  {k:"chg",g:"price",l:"1D chg",t:"Change vs previous close. Yields in bp."},
  ...PCT.map(k=>({k:"p"+k,g:"price",l:k==="1D"?"1D %":k,hz:k,
    t:(k==="YTD"?"Since prior year-end close":"Price return over "+k)+(k==="10Y"?". Futures: continuous front month, roll-affected (†)":"")+". Yields shown as bp change."})),
@@ -72,6 +72,12 @@ const COLS=[
 const GROUPS=[["","",1],["price","Price",0],["vol","Volume",0],["ma","Moving averages",0]];
 
 /* ---------- cells ---------- */
+/* what a 1Y line is plotted in: yields in %, indices in points, everything else in its quote currency */
+const unitOf=r=>r.kind==="yield"?"% yield":r.kind==="index"?"index points":r.ccy==="GBp"?"GBp (pence)":(r.ccy||"");
+const untag=x=>String(x).replace(/<[^>]+>/g,"");
+function sparkTip(r){const p=r.spark,y=r.kind==="yield";const ch=y?fbp(r.bp&&r.bp["1Y"]):fpct(r.pct&&r.pct["1Y"]);
+ let t="1-year "+(y?"yield":"price")+" line · "+unitOf(r)+" · daily closes (Yahoo, ~every 2nd day)";
+ if(p&&p.length>1)t+="\n1Y "+untag(ch)+(r.spark_from?" since "+r.spark_from:"")+" · high "+untag(fpx(Math.max(...p),r.kind))+" · low "+untag(fpx(Math.min(...p),r.kind));return t;}
 function spark(r){const p=r.spark;if(!p||p.length<2)return NA;const w=84,h=24;let mn=Math.min(...p),mx=Math.max(...p);if(mx===mn)mx=mn+1;
  const pts=p.map((v,i)=>[(i/(p.length-1))*w,h-2-((v-mn)/(mx-mn))*(h-4)]);const d=pts.map((q,i)=>(i?"L":"M")+q[0].toFixed(1)+" "+q[1].toFixed(1)).join("");
  const up=p[p.length-1]>=p[0];const c=up?"var(--good)":"var(--bad)";const last=pts[pts.length-1];
@@ -91,7 +97,7 @@ function cell(c,r,S){const k=c.k,hid=c.hide?" c-opt":"";
  if(k==="px"){const q=quoteLabel(r);return'<td class="num px c-px"'+(q?' title="'+esc(q.tip)+'"':"")+'>'+fpx(r.px,r.kind)+(q?'<span class="qt">'+esc(q.txt)+'</span>':"")+'</td>';}
  if(k==="mcap"){const v=r.mcap_eur;return'<td class="num c-mcap"'+(isNum(v)?' title="'+esc(fundTip(r,"mcap"))+'"':"")+'>'+feur(v)+'</td>';}
  if(k==="ev"){const v=r.ev_eur;return'<td class="num c-ev"'+(isNum(v)?' title="'+esc(fundTip(r,"ev"))+'"':"")+'>'+feur(v)+'</td>';}
- if(k==="spark")return'<td class="c-spark" title="1Y: '+esc(fpct(r.pct&&r.pct["1Y"]).replace(/<[^>]+>/g,""))+(r.spark_from?" (from "+r.spark_from+")":"")+'">'+spark(r)+'</td>';
+ if(k==="spark")return'<td class="c-spark" title="'+esc(sparkTip(r))+'">'+spark(r)+'</td>';
  if(k==="chg"){const v=r.kind==="yield"?(r.bp&&r.bp["1D"]):r.chg;const s=isNum(v)?(v>0?"up":v<0?"dn":""):"";return'<td class="num '+s+'">'+(r.kind==="yield"?fbp(v):fchg(v,r.px,r.kind))+'</td>';}
  if(k[0]==="p"){const hz=c.hz;const y=r.kind==="yield";const v=y?(r.bp&&r.bp[hz]):(r.pct&&r.pct[hz]);
   const roll=hz==="10Y"&&r.roll&&isNum(v);const tip=roll?' title="Continuous front-month futures: 10Y figure is roll-affected"':y&&isNum(r.pct&&r.pct[hz])?' title="'+esc(fpct(r.pct[hz]))+' relative change in yield"':"";
@@ -158,13 +164,13 @@ function renderAll(){const pw=isPower();document.body.classList.toggle("is-power
 function yahooUrl(s){return"https://finance.yahoo.com/quote/"+encodeURIComponent(s);}
 function bigChart(r){const p=r.spark;if(!p||p.length<2)return'<p class="fallback-msg">No price history available.</p>';const w=600,h=220;let mn=Math.min(...p),mx=Math.max(...p);if(mx===mn)mx=mn+1;
  const d=p.map((v,i)=>(i?"L":"M")+((i/(p.length-1))*w).toFixed(1)+" "+(h-8-((v-mn)/(mx-mn))*(h-16)).toFixed(1)).join("");const c=p[p.length-1]>=p[0]?"var(--good)":"var(--bad)";
- return'<svg viewBox="0 0 '+w+' '+h+'" preserveAspectRatio="none" class="fallback-svg"><path d="'+d+'L'+w+' '+h+'L0 '+h+'Z" fill="'+c+'" opacity=".12"/><path d="'+d+'" fill="none" stroke="'+c+'" stroke-width="2" vector-effect="non-scaling-stroke"/></svg><div class="fallback-axis"><span>'+esc(r.spark_from||"")+'</span><span>hi '+fpx(mx,r.kind)+' · lo '+fpx(mn,r.kind)+'</span><span>'+esc(r.bar_date||"")+'</span></div>';}
+ return'<svg viewBox="0 0 '+w+' '+h+'" preserveAspectRatio="none" class="fallback-svg"><path d="'+d+'L'+w+' '+h+'L0 '+h+'Z" fill="'+c+'" opacity=".12"/><path d="'+d+'" fill="none" stroke="'+c+'" stroke-width="2" vector-effect="non-scaling-stroke"/></svg><div class="fallback-axis"><span>'+esc(r.spark_from||"")+'</span><span>hi '+fpx(mx,r.kind)+' · lo '+fpx(mn,r.kind)+' '+esc(unitOf(r))+'</span><span>'+esc(r.bar_date||"")+'</span></div>';}
 /* TradingView's embeddable widget refuses Cboe Treasury yields (TVC:US*) with an "only available on TradingView" popup,
    so yield rows open the Yahoo 1Y line straight away; the TradingView button still links to the full chart. */
 const noWidget=r=>r.kind==="yield"||/^TVC:US\d/.test(r.tv||"");
 function openChart(r){const m=$("chartModal");const y=noWidget(r);$("cmTitle").textContent=r.name;$("cmMeta").textContent=[r.tv||"no TradingView mapping",r.sym,r.ccy].filter(Boolean).join(" · ");
  $("cmTv").href=r.tv?"https://www.tradingview.com/chart/?symbol="+encodeURIComponent(r.tv):"https://www.tradingview.com/";$("cmYahoo").href=yahooUrl(r.sym);
- $("cmFallback").innerHTML='<div class="fallback-head">'+(y?"1Y daily closes (Yahoo, %). Treasury yields can't be embedded from TradingView; use TradingView ↗ for the interactive chart.":"1Y daily closes (Yahoo) — shown when the TradingView widget is unavailable for this symbol")+'</div>'+bigChart(r);
+ $("cmFallback").innerHTML='<div class="fallback-head">'+(y?"1-year yield, % · daily closes (Yahoo). Treasury yields can't be embedded from TradingView; use TradingView ↗ for the interactive chart.":"1-year price, "+esc(unitOf(r))+" · daily closes (Yahoo) — shown when the TradingView widget is unavailable for this symbol")+'</div>'+bigChart(r);
  m.hidden=false;document.body.classList.add("modal-open");$("cmClose").focus();
  const fb=$("cmFallback"),sb=$("cmSimple");
  if(r.tv&&!y&&window.MM&&window.MM.openChart){fb.hidden=true;sb.classList.remove("is-on");sb.disabled=false;sb.title="Toggle a simple 1Y line from the table data";window.MM.openChart(r.name,r.tv);if(!(window.MM.selfDrawn&&window.MM.selfDrawn(r.tv)))setTimeout(()=>{if(!window.TradingView)fb.hidden=false;},5000);}
