@@ -63,7 +63,7 @@ function head(c,r){const name=(r&&r.name)||(c&&c.name)||cur;const px=r&&isNum(r.
  $("coName").textContent=name;
  $("coSub").textContent=[cur,exch,(c&&c.long_name&&norm(c.long_name)!==norm(name))?c.long_name:null].filter(Boolean).join(" · ");
  $("coQuote").innerHTML='<span class="co-px">'+fpx(px)+'</span><span class="co-ccy">'+esc(ccyLab(ccy))+'</span>'+(isNum(d1)?'<span class="co-chg '+(d1>0?"up":d1<0?"dn":"")+'">'+pct(d1,2)+'</span>':"")+
-  (r&&r.bar_date?'<span class="co-asof">close '+esc(dateTxt(r.bar_date)||r.bar_date)+'</span>':"");
+  (()=>{const q=r&&window.MMTable&&window.MMTable.quoteLabel&&window.MMTable.quoteLabel(r);return q?'<span class="co-asof" title="'+esc(q.tip)+'">'+esc(q.txt)+'</span>':r&&r.bar_date?'<span class="co-asof">close '+esc(dateTxt(r.bar_date)||r.bar_date)+'</span>':"";})();
  $("coTags").innerHTML=tags;$("coTags").hidden=!tags;
  $("coYahoo").href="https://finance.yahoo.com/quote/"+encodeURIComponent(cur);
  $("coChartBtn").hidden=!r;}
