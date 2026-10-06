@@ -4,10 +4,12 @@ on:
   schedule:
     # UTC. Weekdays ~05:30 (pre-Europe open), ~12:30 (Nordic Power only: tomorrow's day-ahead prices
     # and the day's EEX settlements) and ~21:00 (after US close; markets + news only).
+    # Weekends ~12:30: Nordic Power only (day-ahead auctions run every day).
     # Note: GitHub runs scheduled workflows only from the default branch.
     - cron: "30 5 * * 1-5"
     - cron: "30 12 * * 1-5"
     - cron: "0 21 * * 1-5"
+    - cron: "30 12 * * 0,6"
   workflow_dispatch:
 
 permissions:
@@ -31,29 +33,30 @@ jobs:
       - name: Install
         run: pip install -r scripts/requirements.txt
       - name: Market data (Yahoo)
-        if: github.event.schedule != '30 12 * * 1-5'
+        if: ${{ !startsWith(github.event.schedule, '30 12') }}
         run: python scripts/build_data.py
       - name: Company fundamentals (Yahoo, company panel)
         # ~1-2 min; morning + evening builds only (not the 12:30 power-only run)
-        if: github.event.schedule != '30 12 * * 1-5'
+        if: ${{ !startsWith(github.event.schedule, '30 12') }}
         run: python scripts/build_companies.py
         timeout-minutes: 8
         continue-on-error: true
       - name: News
-        if: github.event.schedule != '30 12 * * 1-5'
+        if: ${{ !startsWith(github.event.schedule, '30 12') }}
         run: python scripts/build_news.py
         continue-on-error: true
-      - name: Nordic power (EEX CSV, day-ahead, hydro)
-        # Energy-Charts allows ~2 price requests/minute, so this step takes several minutes; skipped at 21:00.
+      - name: Nordic power (ENTSO-E, EEX CSV, day-ahead, hydro)
+        # ENTSO-E is the primary day-ahead source (~1-2 min); Energy-Charts (~2 req/min) only fills failed zones.
+        # Skipped at 21:00.
         if: github.event.schedule != '0 21 * * 1-5'
         run: python scripts/build_power.py
         env:
-          # optional: ENTSO-E wind / generation / load for SE4; skipped when the secret is not set
+          # ENTSO-E Transparency: day-ahead prices, SE4 wind/load/flows/outages, reservoirs (skipped when unset)
           ENTSOE_API_TOKEN: ${{ secrets.ENTSOE_API_TOKEN }}
         timeout-minutes: 15
         continue-on-error: true
       - name: Symbol search index (Markets autofill)
-        if: github.event.schedule != '30 12 * * 1-5'
+        if: ${{ !startsWith(github.event.schedule, '30 12') }}
         run: python scripts/build_symbols.py
         continue-on-error: true
       - name: Commit data back to this branch
