@@ -5,11 +5,15 @@ on:
     # UTC. Weekdays ~05:30 (pre-Europe open), ~12:30 (Nordic Power only: tomorrow's day-ahead prices
     # and the day's EEX settlements) and ~21:00 (after US close; markets + news only).
     # Weekends ~12:30: Nordic Power only (day-ahead auctions run every day).
+    # Daily ~17:30 UTC (19:30 CEST / 18:30 CET): Nordic Power only, after the ENTSO-E deadline for tomorrow's day-ahead
+    # wind/solar forecast (A69, D-1 18:00 Brussels time = 16:00 UTC summer / 17:00 UTC winter), so SE4 'tomorrow
+    # expected' capture is filled.
     # Note: GitHub runs scheduled workflows only from the default branch.
     - cron: "30 5 * * 1-5"
     - cron: "30 12 * * 1-5"
     - cron: "0 21 * * 1-5"
     - cron: "30 12 * * 0,6"
+    - cron: "30 17 * * *"
   workflow_dispatch:
 
 permissions:
@@ -33,16 +37,16 @@ jobs:
       - name: Install
         run: pip install -r scripts/requirements.txt
       - name: Market data (Yahoo)
-        if: ${{ !startsWith(github.event.schedule, '30 12') }}
+        if: ${{ !startsWith(github.event.schedule, '30 12') && github.event.schedule != '30 17 * * *' }}
         run: python scripts/build_data.py
       - name: Company fundamentals (Yahoo, company panel)
         # ~1-2 min; morning + evening builds only (not the 12:30 power-only run)
-        if: ${{ !startsWith(github.event.schedule, '30 12') }}
+        if: ${{ !startsWith(github.event.schedule, '30 12') && github.event.schedule != '30 17 * * *' }}
         run: python scripts/build_companies.py
         timeout-minutes: 8
         continue-on-error: true
       - name: News
-        if: ${{ !startsWith(github.event.schedule, '30 12') }}
+        if: ${{ !startsWith(github.event.schedule, '30 12') && github.event.schedule != '30 17 * * *' }}
         run: python scripts/build_news.py
         continue-on-error: true
       - name: Nordic power (ENTSO-E, EEX CSV, day-ahead, hydro)
@@ -56,7 +60,7 @@ jobs:
         timeout-minutes: 15
         continue-on-error: true
       - name: Symbol search index (Markets autofill)
-        if: ${{ !startsWith(github.event.schedule, '30 12') }}
+        if: ${{ !startsWith(github.event.schedule, '30 12') && github.event.schedule != '30 17 * * *' }}
         run: python scripts/build_symbols.py
         continue-on-error: true
       - name: Commit data back to this branch
