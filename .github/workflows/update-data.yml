@@ -33,6 +33,12 @@ jobs:
       - name: Market data (Yahoo)
         if: github.event.schedule != '30 12 * * 1-5'
         run: python scripts/build_data.py
+      - name: Company fundamentals (Yahoo, company panel)
+        # ~1-2 min; morning + evening builds only (not the 12:30 power-only run)
+        if: github.event.schedule != '30 12 * * 1-5'
+        run: python scripts/build_companies.py
+        timeout-minutes: 8
+        continue-on-error: true
       - name: News
         if: github.event.schedule != '30 12 * * 1-5'
         run: python scripts/build_news.py
@@ -55,7 +61,7 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898333+github-actions[bot]@users.noreply.github.com"
           # only the files this run actually rewrote (steps can be skipped per schedule)
-          changed=$(git status --porcelain -- data/market.json data/news.json data/power.json data/symbols.json | awk '{print $2}')
+          changed=$(git status --porcelain -- data/market.json data/news.json data/power.json data/symbols.json data/companies.json | awk '{print $2}')
           if [ -z "$changed" ]; then echo "No data changes"; exit 0; fi
           mkdir -p "$RUNNER_TEMP/out" && cp $changed "$RUNNER_TEMP/out/"
           for i in 1 2 3; do
