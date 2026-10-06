@@ -40,6 +40,11 @@ news only), and on demand, and commits:
   include roll effects. Universe: `scripts/universe.py`.
 - `data/news.json` from `scripts/build_news.py`: Google News RSS searches plus exchange announcements
   (Oslo Børs NewsWeb, Nasdaq Nordic). Headlines and links only. FT excluded.
+- `data/companies.json` from `scripts/build_companies.py` (05:30 and 21:00 runs): per-equity fundamentals keyed by
+  Yahoo symbol for the company panel (click a company name in the Table; shareable as `#co=SYMBOL`). Yahoo
+  quoteSummary (valuation, consensus, estimates, calendar, profile) plus the fundamentals-timeseries endpoint
+  (revenue, EBITDA, net income, net debt, FCF: last 4 years, last 4 quarters, TTM). EV = market cap + net debt
+  (+ minorities) with the balance sheet converted at current FX. Per-symbol failures keep the previous entry.
 
 - `data/symbols.json` from `scripts/build_symbols.py`: offline Markets chart autofill catalog (name + TradingView
   `EXCH:SYM` + kind). Built from Nasdaq Trader directories and a filtered free ticker database for LSE/AIM, OMXSTO,
@@ -56,5 +61,5 @@ news only), and on demand, and commits:
   - Hydro: NVE magasinstatistikk API (Norway and NO1–NO5, weekly) and the Energiföretagen weekly PDF (Sweden snapshot).
   - Capture prices are computed (generation-weighted average price) only where Energy-Charts publishes generation.
 
-Local run: `pip install -r scripts/requirements.txt && python scripts/build_data.py && python scripts/build_news.py && python scripts/build_power.py && python scripts/build_symbols.py`,
+Local run: `pip install -r scripts/requirements.txt && python scripts/build_data.py && python scripts/build_news.py && python scripts/build_power.py && python scripts/build_symbols.py && python scripts/build_companies.py`,
 then `python -m http.server` and open http://localhost:8000/.

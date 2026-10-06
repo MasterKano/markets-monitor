@@ -28,6 +28,7 @@ function fvol(v){if(!isNum(v))return NA;const a=Math.abs(v);if(a>=1e9)return(v/1
 /* neutral display labels for older data files (labels now come from scripts/universe.py) */
 const SEC_FIX={"Potential acquirers":{label:"Strategic peers",note:"Speculative, illustrative screen of listed strategic and financial investors active in European renewables. Not based on any reported approach; not investment advice. Hover a name for the rationale."}};
 const secLab=sec=>{const f=SEC_FIX[sec.label];return f?{label:f.label,note:f.note}:{label:sec.label,note:sec.note};};
+const isCo=r=>r.kind==="equity"&&!!window.MMCompany;
 const rows=()=>{const g=DATA&&DATA.groups.find(x=>x.id===st.tab);return g?g.sections.flatMap(s=>s.rows):[];};
 function feur(v){if(!isNum(v))return NA;const a=Math.abs(v);if(a>=1e12)return(v/1e12).toFixed(2)+"T";if(a>=1e9)return(v/1e9).toFixed(a>=1e11?1:2)+"B";if(a>=1e6)return(v/1e6).toFixed(a>=1e8?0:a>=1e7?1:2)+"M";if(a>=1e3)return(v/1e3).toFixed(0)+"K";return String(Math.round(v));}
 function fundTip(r,kind){const raw=kind==="ev"?r.ev:r.mcap;const eur=kind==="ev"?r.ev_eur:r.mcap_eur;const ccy=r.mcap_ccy||r.ccy||"";
@@ -69,7 +70,8 @@ function scales(rs){const out={},outbp={};for(const k of PCT){const a=rs.filter(
 function cell(c,r,S){const k=c.k,hid=c.hide?" c-opt":"";
  if(k==="name"){const sub=[r.sym,r.ccy].filter(Boolean).join(" · ");
   const flags=(r.note?'<span class="info" title="'+esc(r.note)+'">i</span>':"")+(r.error?'<span class="info bad" title="'+esc(r.error)+'">!</span>':"");
-  return'<th scope="row" class="c-name"'+(r.note?' title="'+esc(r.name+" — "+r.note)+'"':' title="'+esc(r.name+(r.bar_date?" · last bar "+r.bar_date:""))+'"')+'><span class="nm">'+esc(r.name)+'</span>'+flags+'<span class="sym">'+esc(sub)+'</span></th>';}
+  const co=isCo(r);const nm=co?'<button type="button" class="nm co-link" aria-label="'+esc(r.name+": company profile")+'">'+esc(r.name)+'</button>':'<span class="nm">'+esc(r.name)+'</span>';
+  return'<th scope="row" class="c-name'+(co?" has-co":"")+'"'+(r.note?' title="'+esc(r.name+" — "+r.note+(co?" · click for company profile":""))+'"':' title="'+esc(r.name+(co?" · click for company profile":r.bar_date?" · last bar "+r.bar_date:""))+'"')+'>'+nm+flags+'<span class="sym">'+esc(sub)+'</span></th>';}
  if(r.error&&k!=="name")return'<td class="na-cell'+hid+'">'+NA+'</td>';
  if(k==="px")return'<td class="num px c-px">'+fpx(r.px,r.kind)+'</td>';
  if(k==="mcap"){const v=r.mcap_eur;return'<td class="num c-mcap"'+(isNum(v)?' title="'+esc(fundTip(r,"mcap"))+'"':"")+'>'+feur(v)+'</td>';}
@@ -121,10 +123,11 @@ function renderTable(){const tbl=$("tbl");const g=DATA.groups.find(x=>x.id===st.
  tbl.classList.remove("is-compact");
  tbl.querySelectorAll("thead th[data-k]").forEach(th=>th.querySelector("button").onclick=()=>{const k=th.dataset.k;const asc=k==="name";if(st.sort!==k){st.sort=k;st.dir=asc?1:-1;}else if((st.dir===-1&&!asc)||(st.dir===1&&asc))st.dir*=-1;else{st.sort=null;}save();renderTable();});
  const open=tr=>{const r=all.find(x=>x.sym===tr.dataset.sym);r&&openChart(r);};
- tbl.querySelectorAll("tbody tr[data-sym]").forEach(tr=>{tr.onclick=()=>open(tr);tr.onkeydown=e=>{if(e.key==="Enter")open(tr);};});
+ const pick=(tr,e)=>{const r=all.find(x=>x.sym===tr.dataset.sym);if(!r)return;if(e&&e.target.closest&&e.target.closest("th.has-co")&&isCo(r)){window.MMCompany.open(r.sym);return;}openChart(r);};
+ tbl.querySelectorAll("tbody tr[data-sym]").forEach(tr=>{tr.onclick=e=>pick(tr,e);tr.onkeydown=e=>{if(e.key==="Enter"&&e.target===tr)open(tr);};});
  renderMovers(all);
  const futs=all.some(r=>r.roll);const fxN=DATA.fx_asof?(" Cap/EV in EUR (FX as of "+DATA.fx_asof+")."):" ";
- $("tblFoot").innerHTML='Prices delayed ~15 min (Yahoo). Price returns from daily closes (not total return).'+fxN+(futs?' † Continuous front-month futures: long-horizon (esp. 10Y) figures include roll effects.':"")+(st.tab==="rates"?" Yield rows show changes and MA distance in basis points.":"")+' n/a = not available from source or not enough history. Click a row for its chart.';}
+ $("tblFoot").innerHTML='Prices delayed ~15 min (Yahoo). Price returns from daily closes (not total return).'+fxN+(futs?' † Continuous front-month futures: long-horizon (esp. 10Y) figures include roll effects.':"")+(st.tab==="rates"?" Yield rows show changes and MA distance in basis points.":"")+' n/a = not available from source or not enough history. Click a company name for its profile (valuation, consensus, financials); click elsewhere in the row for its chart.';}
 function renderStamp(){const el=$("tblStamp");if(!DATA){el.textContent="";return;}const d=new Date(DATA.generated_utc);el.innerHTML='<span class="stamp-dot"></span>Data updated <b>'+esc(gf.format(d))+'</b> Geneva · '+esc(ago(DATA.generated_utc))+(DATA.errors&&DATA.errors.length?' · <span title="'+esc(DATA.errors.map(e=>e.sym+": "+e.error).join("\n"))+'">'+DATA.errors.length+' missing</span>':"");$("footStamp").textContent="Table data updated "+gf.format(d)+" Geneva.";$("exAsOf").textContent=gf.format(d)+" Geneva";const fxEl=$("exFxAsOf");if(fxEl)fxEl.textContent=DATA.fx_asof||"n/a";}
 function renderNews(){const box=$("newsList"),hd=$("newsTitle"),meta=$("newsMeta");const g=DATA&&DATA.groups.find(x=>x.id===st.tab);hd.textContent="News · "+(st.tab===POWER?"Nordic Power":g?g.label:"");
  if(!NEWS){box.innerHTML='<li class="news-empty">News not available yet.</li>';meta.textContent="";return;}
@@ -159,7 +162,7 @@ async function load(){const tbl=$("tbl");if(!DATA)tbl.innerHTML='<tbody><tr><td 
  const[a,b]=await Promise.allSettled([getJSON("data/market.json"),getJSON("data/news.json")]);
  if(a.status==="fulfilled")DATA=a.value;else if(!DATA)tbl.innerHTML='<tbody><tr><td class="empty">Could not load data/market.json ('+esc(a.reason&&a.reason.message)+'). If you opened the file directly, serve the folder over HTTP.</td></tr></tbody>';
  if(b.status==="fulfilled")NEWS=b.value;
- if(DATA&&st.tab!==POWER&&!DATA.groups.some(g=>g.id===st.tab))st.tab=DATA.groups[0].id;if(st.sort&&!val[st.sort])st.sort=null;renderAll();}
+ if(DATA&&st.tab!==POWER&&!DATA.groups.some(g=>g.id===st.tab))st.tab=DATA.groups[0].id;if(st.sort&&!val[st.sort])st.sort=null;renderAll();window.MMCompany&&window.MMCompany.ready();}
 $("priceModeBtn").onclick=()=>{st.mode="price";save();renderAll();};
 $("volMaModeBtn").onclick=()=>{st.mode="volma";save();renderAll();};
 {const ex=$("explain");ex.open=st.explain==null?!NARROW.matches:st.explain;ex.addEventListener("toggle",()=>{st.explain=ex.open;save();});}
@@ -167,6 +170,6 @@ let ft;$("tblFilter").addEventListener("input",e=>{clearTimeout(ft);ft=setTimeou
 $("cmClose").onclick=closeChart;$("cmSimple").onclick=()=>{const f=$("cmFallback");f.hidden=!f.hidden;$("cmSimple").classList.toggle("is-on",!f.hidden);};$("chartModal").addEventListener("click",e=>{if(e.target.id==="chartModal")closeChart();});
 document.addEventListener("keydown",e=>{if(e.key==="Escape"&&!$("chartModal").hidden)closeChart();});
 setInterval(()=>DATA&&renderStamp(),60000);
-window.MMTable={reload:()=>{if(st.tab===POWER&&window.MMPower)window.MMPower.reload();return load();}};
+window.MMTable={data:()=>DATA,news:()=>NEWS,openChart:r=>openChart(r),reload:()=>{if(st.tab===POWER&&window.MMPower)window.MMPower.reload();return load();}};
 load();
 })();
