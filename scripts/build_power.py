@@ -16,7 +16,13 @@ Sources (free; no API key except the optional ENTSO-E part; real data only, miss
   * ENTSO-E Transparency (env ENTSOE_API_TOKEN, GitHub secret of the same name; skipped when unset): SE4 wind/solar
     actual (A75) vs day-ahead forecast (A69), load actual vs day-ahead forecast (A65) + week-ahead min/max,
     physical flows on SE4 borders (A11), outages aggregated without unit names (A80/A78), weekly reservoir
-    stored energy (A72) for SE1-4 / NO1-5, and computed wind/solar capture prices.
+    stored energy (A72) for SE1-4 / NO1-5, and computed wind/solar capture prices. SE4 actual load is sanity-filtered
+    (values < 40% of the day-ahead forecast dropped; the latest, still-incomplete hour is flagged provisional).
+  * Nord Pool (no key): official day-ahead system price (SYS) and area daily averages (data portal API), and
+    nuclear availability for the Swedish and Finnish reactors from active UMM/REMIT unavailability messages.
+  * Nordic hydro balance: NVE (Norway) + ENTSO-E A72 country aggregates (Sweden, Finland) vs the median of the week.
+  * Wind/solar output vs forecast: DK1/DK2 from Energinet Energi Data Service (no key; also DK day-ahead prices),
+    FI from Fingrid open data when FINGRID_API_KEY is set (free registration at data.fingrid.fi), else ENTSO-E.
 
 Usage: python scripts/build_power.py [--out data/power.json] [--skip-spot] [--eex-csv PATH]
 """
@@ -48,10 +54,13 @@ EDS_MAP = {"DK1": "DK1", "DK2": "DK2", "NO2": "NO2", "SE3": "SE3", "SE4": "SE4",
 MON = {m: i for i, m in enumerate(["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"], 1)}
 
 
+def _secrets():
+    return [t for t in ((os.environ.get(k) or "").strip() for k in ("ENTSOE_API_TOKEN", "FINGRID_API_KEY")) if t]
+
+
 def log(*a):
     msg = " ".join(str(x) for x in a)
-    t = (os.environ.get("ENTSOE_API_TOKEN") or "").strip()
-    if t:
+    for t in _secrets():
         msg = msg.replace(t, "***")
     print(re.sub(r"(securityToken=)[^&\s'\"]+", r"\1***", msg), file=sys.stderr, flush=True)
 
@@ -214,7 +223,10 @@ def build_eex(csv_path=None):
     cov = dict(rows=int(len(df)), first=dates[0], last=asof, trade_dates=len(dates), areas=areas,
                tenor_types=sorted(pw["maturityType"].unique()),
                groups=sorted(df["marketGroup"].unique()))
-    return dict(source=src, asof=asof, dates=dates, tenors=tenors, in_delivery=in_delivery, zones=zones,
+    exp = dt.datetime.now(UTC).astimezone(CET).date() - dt.timedelta(days=1)
+    while exp.weekday() >= 5:
+        exp -= dt.timedelta(days=1)
+    return dict(source=src, asof=asof, expected=exp.isoformat(), lag=asof < exp.isoformat(), dates=dates, tenors=tenors, in_delivery=in_delivery, zones=zones,
                 bench=bench, hist=hist, oi=oi, drivers=drivers, coverage=cov)
 
 
@@ -287,7 +299,7 @@ def spot_hinta(zone):
     return pd.Series([x["PriceNoTax"] * 1000 for x in js], index=idx, dtype="float64")
 
 
-def build_spot(today, primary=None, primary_status=None):
+def build_spot(today, primary=None, primary_status=None, src_of=None):
     """primary: {zone: series} from ENTSO-E A44 (when the token is set). Energy-Charts, Energi Data Service and
     spot-hinta.fi are only used for zones the primary source did not return."""
     start = (today - dt.timedelta(days=32)).isoformat()
@@ -295,7 +307,7 @@ def build_spot(today, primary=None, primary_status=None):
     zones, status, raw = {}, list(primary_status or []), {}
     for z, s in (primary or {}).items():
         if z in SPOT_ZONES and s is not None and len(s):
-            raw[z] = ("ENTSO-E", s)
+            raw[z] = ((src_of or {}).get(z, "ENTSO-E"), s)
     ec_zones = [z for z in SPOT_ZONES if z not in raw]
     for i, z in enumerate(ec_zones):
         if i:
@@ -574,8 +586,7 @@ def _token():
 
 def _redact(msg):
     msg = str(msg)
-    t = _token()
-    if t:
+    for t in _secrets():
         msg = msg.replace(t, "***")
     return re.sub(r"(securityToken=)[^&\s'\"]+", r"\1***", msg)
 
@@ -882,6 +893,29 @@ def entsoe_reservoirs(today):
     return out, errs
 
 
+def load_qc(load, fc, hidx, ratio=0.4):
+    """Sanity filter for actual load (A65): drop 15-min values below ratio x the day-ahead load forecast (source
+    glitches such as SE4 ~600 MW vs ~2,600 MW forecast on 5 Oct 2026), and hold back the latest hour, which ENTSO-E
+    publishes from incomplete metering and revises later. -> cleaned series, {dropped: [hour idx], prov: [idx, MW]}."""
+    s = load.dropna()
+    qc = dict(ratio=ratio, dropped=[], prov=None)
+    if fc is not None and len(s):
+        f = fc.reindex(s.index)
+        if f.isna().mean() > 0.5:
+            f = fc.resample("15min").ffill(limit=3).reindex(s.index)
+        bad = f.notna() & (s < ratio * f)
+        if bad.any():
+            hrs = sorted({t.floor("1h") for t in s.index[bad.values]})
+            qc["dropped"] = [int(hidx.get_loc(h)) for h in hrs if h in hidx]
+            s = s[~bad.values]
+    if len(s):
+        last_h = s.index[-1].floor("1h")
+        if last_h in hidx:
+            qc["prov"] = [int(hidx.get_loc(last_h)), rnd(s[s.index >= last_h].mean(), 0)]
+        s = s[s.index < last_h]
+    return s, qc
+
+
 def build_entsoe(today, now, prices, prev):
     """SE4 detail (hourly window today-7 .. tomorrow, 30-day daily stats), interconnector flows, outages and
     reservoirs. prices: {zone: series} from A44 (or other spot sources). Missing parts keep the previous values."""
@@ -977,6 +1011,8 @@ def build_entsoe(today, now, prices, prev):
     wind_fc, solar_fc = fc.get("wind"), fc.get("solar")
     load, load_fc = S4.get("load"), S4.get("load_fc")
     out = dict(t0=_ts(hidx[0]), n=len(hidx), unit="MW")
+    if load is not None and len(load):
+        load, out["load_qc"] = load_qc(load, load_fc, hidx)
     ser = {}
     for k, s in (("wind", wind), ("wind_fc", wind_fc), ("solar", solar), ("solar_fc", solar_fc),
                  ("load", load), ("load_fc", load_fc)):
@@ -1077,6 +1113,351 @@ def merge_spot_history(spot, prev, today):
                 cur["days"][d] = v
 
 
+# ------------------------------------------------------------------ Nord Pool (public data portal, no key)
+NP_API = "https://dataportal-api.nordpoolgroup.com/api/"
+NP_HDR = {"Accept": "application/json", "Origin": "https://data.nordpoolgroup.com", "Referer": "https://data.nordpoolgroup.com/"}
+NP_KEEP_DAYS = 35
+
+
+def build_nordpool(today, prev):
+    """Official Nord Pool day-ahead figures: system price (SYS) and area daily averages.
+    DayAheadPrices for today and tomorrow (official areaAverages + SYS by hour), AggregatePrices for SYS daily history."""
+    areas = ["SYS"] + NORDIC_SPOT
+    out = dict(source="Nord Pool day-ahead (data.nordpoolgroup.com)", avg={}, state={}, sys_days={})
+    for d in (today, today + dt.timedelta(days=1)):
+        r = get(NP_API + "DayAheadPrices", ok=(200, 204), tries=3, headers=NP_HDR,
+                params=dict(date=d.isoformat(), market="DayAhead", deliveryArea=",".join(areas), currency="EUR"))
+        if r.status_code == 204 or not r.content.strip():
+            continue
+        js, k = r.json(), d.isoformat()
+        avg = {a["areaCode"]: rnd(a["price"]) for a in js.get("areaAverages") or [] if a.get("price") is not None}
+        if not avg:
+            continue
+        out["avg"][k] = avg
+        states = sorted({s_.get("state") for s_ in js.get("areaStates") or [] if s_.get("state")})
+        out["state"][k] = "/".join(states) or None
+        ent = [(e["deliveryStart"], (e.get("entryPerArea") or {}).get("SYS")) for e in js.get("multiAreaEntries") or []]
+        ent = [(t, v) for t, v in ent if v is not None]
+        if ent:
+            s = pd.Series([v for _, v in ent], index=pd.to_datetime([t for t, _ in ent], utc=True), dtype="float64").sort_index()
+            h = s.resample("1h").mean()
+            out["sys_days"][k] = dict(t0=_ts(h.index[0]), h=[rnd(v) for v in h], avg=avg.get("SYS"),
+                                      min=rnd(s.min()), max=rnd(s.max()), neg=int((s < 0).sum()), full=True,
+                                      res=int((s.index[1] - s.index[0]).total_seconds() // 60) if len(s) > 1 else 60)
+    if not out["avg"]:
+        raise LookupError("no Nord Pool day-ahead data for today/tomorrow")
+    # SYS daily averages (official), last NP_KEEP_DAYS delivery days
+    hist = {}
+    for y in sorted({today.year, (today - dt.timedelta(days=NP_KEEP_DAYS)).year}):
+        try:
+            js = get(NP_API + "AggregatePrices", tries=2, headers=NP_HDR,
+                     params=dict(year=y, market="DayAhead", deliveryArea="SYS", currency="EUR")).json()
+            for x in js.get("multiAreaDailyAggregates") or []:
+                v = (x.get("averagePerArea") or {}).get("SYS")
+                if v is not None:
+                    hist[x["deliveryStart"][:10]] = rnd(v)
+        except Exception as e:
+            log(f"nordpool aggregate {y}: {e}")
+    for k, a in out["avg"].items():
+        if a.get("SYS") is not None:
+            hist[k] = a["SYS"]
+    for d, v in ((prev or {}).get("sys") or []):        # keep earlier days if the history call failed
+        hist.setdefault(d, v)
+    keep = (today - dt.timedelta(days=NP_KEEP_DAYS)).isoformat()
+    out["sys"] = [[d, hist[d]] for d in sorted(hist) if d >= keep]
+    out["asof"] = dt.datetime.now(UTC).isoformat(timespec="seconds")
+    return out
+
+
+# ------------------------------------------------------------------ Nordic nuclear availability (Nord Pool UMM, no key)
+UMM_API = "https://ummapi.nordpoolgroup.com/messages"
+# Swedish and Finnish reactors (public plant names of third parties); net capacity MW used when a message lacks it
+REACTORS = [("Forsmark 1", "SE", 1104), ("Forsmark 2", "SE", 1121), ("Forsmark 3", "SE", 1172),
+            ("Oskarshamn 3", "SE", 1400), ("Ringhals 3", "SE", 1081), ("Ringhals 4", "SE", 1134),
+            ("Olkiluoto 1", "FI", 890), ("Olkiluoto 2", "FI", 890), ("Olkiluoto 3", "FI", 1600),
+            ("Loviisa 1", "FI", 507), ("Loviisa 2", "FI", 507)]
+NUC_DAYS = 14
+
+
+def _reactor(name):
+    m = re.search(r"(Forsmark|Ringhals|Oskarshamn|Olkiluoto|Loviisa)\D*(\d)", name or "", re.I)
+    return f"{m.group(1).title()} {m.group(2)}" if m else None
+
+
+def build_nuclear(now, today):
+    """Available nuclear capacity in Sweden and Finland, now and for the next 14 days, from active Nord Pool UMM
+    (REMIT) production-unavailability messages. Per reactor and hour: lost MW = max(block-level messages,
+    sum over generators of generator-level messages), capped at net capacity."""
+    import urllib.parse
+    t0 = pd.Timestamp(now).floor("1h")
+    H = int((_cet_bounds(today + dt.timedelta(days=NUC_DAYS + 1), today)[0] - t0).total_seconds() // 3600)
+    t1 = t0 + pd.Timedelta(hours=H)
+    q = [("FuelTypes", 14), ("Areas", ENTSOE_EIC["SE3"]), ("Areas", ENTSOE_EIC["FI"]), ("MessageTypes", 1),
+         ("Status", 1), ("IncludeOutdated", "false"), ("EventStartDate", _ts(t0)), ("EventStopDate", _ts(t1)), ("Limit", 500)]
+    items = get(UMM_API + "?" + urllib.parse.urlencode(q), tries=3, headers={"Accept": "application/json"}).json().get("items") or []
+    idx = pd.date_range(t0, periods=H, freq="1h")
+    mid = idx + pd.Timedelta(minutes=30)
+    U = {n: dict(c=c, cap=float(cap), blk=pd.Series(0.0, index=idx), gen={}, ev=[]) for n, c, cap in REACTORS}
+    for m in items:
+        if m.get("eventStatus") != 1 or m.get("isOutdated"):
+            continue
+        planned = m.get("unavailabilityType") == 2
+        why = re.sub(r"\s+", " ", (m.get("unavailabilityReason") or "").strip())[:70]
+        for key in ("productionUnits", "generationUnits"):
+            for u in m.get(key) or []:
+                rid = _reactor(u.get("productionUnitName") or u.get("name"))
+                if rid not in U:
+                    continue
+                R = U[rid]
+                inst = float(u.get("installedCapacity") or 0)
+                if key == "productionUnits" and inst > 300:
+                    R["cap_msg"] = inst
+                for tp in u.get("timePeriods") or []:
+                    a, b = pd.Timestamp(tp["eventStart"]), pd.Timestamp(tp["eventStop"])
+                    if b <= t0 or a >= t1:
+                        continue
+                    av, un = tp.get("availableCapacity"), tp.get("unavailableCapacity")
+                    lost = max(0.0, (inst - av) if (av is not None and inst) else float(un or 0))
+                    mask = (mid >= a) & (mid < b)
+                    if key == "productionUnits":
+                        R["blk"][mask] = R["blk"][mask].clip(lower=lost)
+                    else:
+                        g = R["gen"].setdefault(u.get("eic") or u.get("name"), pd.Series(0.0, index=idx))
+                        g[mask] = g[mask].clip(lower=lost)
+                    if lost > 0:
+                        R["ev"].append(dict(a=a, b=b, lost=lost, planned=planned, why=why))
+    days = pd.Index([t.tz_convert(CET).date() for t in idx])
+    tot = {"SE": pd.Series(0.0, index=idx), "FI": pd.Series(0.0, index=idx)}
+    cap = {"SE": 0.0, "FI": 0.0}
+    units = []
+    for n, R in U.items():
+        c_ = R.get("cap_msg") or R["cap"]
+        gen = sum(R["gen"].values()) if R["gen"] else pd.Series(0.0, index=idx)
+        lost = pd.concat([R["blk"], gen], axis=1).max(axis=1).clip(upper=c_)
+        avail = c_ - lost
+        tot[R["c"]] += avail
+        cap[R["c"]] += c_
+        red = lost > 1
+        if not red.any():
+            continue
+        first = idx[red.values.argmax()]
+        if red.iloc[-1]:
+            ends = [e["b"] for e in R["ev"] if e["b"] >= t1 - pd.Timedelta(hours=1)]
+            back = max(ends) if ends else t1
+        else:
+            back = idx[len(red) - 1 - red.values[::-1].argmax()] + pd.Timedelta(hours=1)
+        cur = [e for e in R["ev"] if e["a"] <= max(first, t0) + pd.Timedelta(minutes=30) < e["b"]] or R["ev"]
+        main = max(cur, key=lambda e: e["lost"])
+        units.append(dict(n=n, c=R["c"], cap=rnd(c_, 0), now=rnd(avail.iloc[0], 0), min=rnd(avail.min(), 0),
+                          start=_ts(first), back=_ts(back), planned=main["planned"], why=main["why"]))
+    units.sort(key=lambda r: (r["now"] >= r["cap"], r["c"], r["n"]))
+    dly = []
+    for d in sorted(set(days)):
+        m_ = days == d
+        if d < today or m_.sum() < 12:
+            continue
+        dly.append([d.isoformat(), rnd(tot["SE"][m_].mean(), 0), rnd(tot["FI"][m_].mean(), 0)])
+    w7 = idx < t0 + pd.Timedelta(days=7)
+    return dict(source="Nord Pool UMM (REMIT urgent market messages)", asof=dt.datetime.now(UTC).isoformat(timespec="seconds"),
+                cap={k: rnd(v, 0) for k, v in cap.items()}, now={k: rnd(v.iloc[0], 0) for k, v in tot.items()},
+                d7={k: rnd(v[w7].mean(), 0) for k, v in tot.items()}, d14={k: rnd(v.mean(), 0) for k, v in tot.items()},
+                days=dly, units=units, msgs=len(items))
+
+
+# ------------------------------------------------------------------ Nordic hydro balance vs normal
+A72_COUNTRY = {"SE": "10YSE-1--------K", "FI": "10YFI-1--------U"}
+NORM_YEARS = 10
+
+
+def _iso(t):
+    c = (t + pd.Timedelta(hours=12)).tz_convert(CET).isocalendar()
+    return int(c[0]), int(c[1])
+
+
+def build_hydro_bal(today, no):
+    """Nordic reservoir energy vs the seasonal normal, TWh. Norway: NVE (filling % x capacity; normal = NVE median
+    of the week, 2006-2025). Sweden and Finland: ENTSO-E A72 country aggregates; normal = median of the same ISO week
+    over the previous 10 years. Nordic = Norway + Sweden + Finland at the latest week all three have published."""
+    y1 = today.year - 1
+    y0 = y1 - NORM_YEARS + 1
+    areas, wk = {}, {}
+    for c, eic in A72_COUNTRY.items():
+        parts, a = [], dt.date(y0, 1, 1)
+        while a <= today:
+            b = min(dt.date(a.year + 2, 1, 1), today + dt.timedelta(days=1))
+            try:
+                parts += [it["s"] for it in entsoe_get(dict(documentType="A72", processType="A16", in_Domain=eic, **_period(a, b)))]
+            except LookupError:
+                pass
+            a = b
+        if not parts:
+            raise LookupError(f"A72 {c}: no data")
+        s = pd.concat(parts).sort_index()
+        s = s[~s.index.duplicated(keep="last")].dropna()
+        df = pd.DataFrame([(*_iso(t), v / 1e6) for t, v in s.items()], columns=["y", "w", "v"])
+        hist = df[(df.y >= y0) & (df.y <= y1)]
+        norm = hist.groupby("w")["v"].median()
+        if 53 not in norm.index and 52 in norm.index:
+            norm[53] = norm[52]
+        wk[c] = {(int(r.y), int(r.w)): float(r.v) for r in df.itertuples()}
+        last = df.iloc[-1]
+        ly, lw, lv = int(last.y), int(last.w), float(last.v)
+        n = float(norm.get(lw, float("nan")))
+        areas[c] = dict(y=ly, w=lw, twh=rnd(lv, 1), norm=rnd(n, 1), dev=rnd(lv - n, 1), pct=rnd((lv / n - 1) * 100, 1),
+                        nyears=f"{y0}-{y1}", src="ENTSO-E A72")
+        areas[c]["_norm"] = norm
+    R = (no or {}).get("regions", {}).get("Norway")
+    if R and R.get("last"):
+        L, yr = R["last"], no["year"]
+        capn = L["cap"]
+        med = {b[0]: b[2] for b in R["band"] if b[2] is not None}
+        n = med.get(L["week"])
+        areas["NO"] = dict(y=yr, w=L["week"], twh=L["twh"], norm=rnd(n * capn / 100, 1) if n else None, cap=capn,
+                           fill=L["fill"], fill_med=n, src="NVE", nyears=no.get("band_period"))
+        if n:
+            areas["NO"]["dev"] = rnd(L["twh"] - n * capn / 100, 1)
+            areas["NO"]["pct"] = rnd((L["fill"] / n - 1) * 100, 1)
+        wk["NO"] = {(yr, w): v * capn / 100 for w, v in R["cur"] if v is not None}
+        wk["NO"].update({(yr - 1, w): v * capn / 100 for w, v in R["prev"] if v is not None})
+        areas["NO"]["_norm"] = pd.Series({w: v * capn / 100 for w, v in med.items()})
+    if not all(k in areas for k in ("NO", "SE", "FI")):
+        raise LookupError("hydro balance needs Norway, Sweden and Finland")
+    common = min((areas[k]["y"], areas[k]["w"]) for k in ("NO", "SE", "FI"))
+    # weekly Nordic total vs normal, last 26 weeks up to the common week
+    weeks = sorted({k for k in wk["SE"] if k <= common})[-26:]
+    ser = []
+    for (y, w) in weeks:
+        vals = [wk[k].get((y, w)) for k in ("NO", "SE", "FI")]
+        nrm = [areas[k]["_norm"].get(w) for k in ("NO", "SE", "FI")]
+        mon = dt.date.fromisocalendar(y, w, 1).isoformat()
+        ser.append([mon, rnd(sum(vals), 1) if all(v is not None for v in vals) else None,
+                    rnd(sum(nrm), 1) if all(v is not None and not pd.isna(v) for v in nrm) else None])
+    tot = ser[-1] if ser else None
+    nordic = None
+    if tot and tot[1] is not None and tot[2]:
+        nordic = dict(y=common[0], w=common[1], date=tot[0], twh=tot[1], norm=tot[2], dev=rnd(tot[1] - tot[2], 1),
+                      pct=rnd((tot[1] / tot[2] - 1) * 100, 1))
+    for k in areas:
+        areas[k].pop("_norm", None)
+        areas[k]["date"] = dt.date.fromisocalendar(areas[k]["y"], areas[k]["w"], 1).isoformat()
+    return dict(areas=areas, nordic=nordic, weeks=ser,
+                source="NVE magasinstatistikk (Norway); ENTSO-E Transparency A72 (Sweden, Finland)")
+
+
+# ------------------------------------------------------------------ wind / solar: Denmark (Energinet) and Finland
+EDS_API = "https://api.energidataservice.dk/dataset/"
+FINGRID_API = "https://data.fingrid.fi/api/datasets/"
+
+
+def _eds(dataset, a, b, flt, cols):
+    r = get(EDS_API + dataset, tries=3, params=dict(start=a.strftime("%Y-%m-%dT%H:%M"), end=b.strftime("%Y-%m-%dT%H:%M"),
+                                                     timezone="UTC", filter=json.dumps(flt), columns=",".join(cols), limit="0"))
+    return pd.DataFrame(r.json().get("records") or [])
+
+
+def fingrid_wind(key, a, b):
+    """Fingrid open data (needs a free API key): dataset 75 wind generation (15 min, MW) and 245 wind forecast
+    (updated every 15 min, next 72 h)."""
+    out = {}
+    for i, (ds, k) in enumerate(((75, "wind"), (245, "wind_fc"))):
+        if i:
+            time.sleep(6.5)                       # Fingrid limit: 10 requests / minute
+        r = get(f"{FINGRID_API}{ds}/data", tries=2, headers={"x-api-key": key, "Accept": "application/json"},
+                params=dict(startTime=_ts(a), endTime=_ts(b), pageSize=20000, sortOrder="asc", format="json"))
+        js = r.json()
+        rows = js.get("data") if isinstance(js, dict) else js
+        if not rows:
+            raise LookupError(f"Fingrid {ds}: no data")
+        out[k] = pd.Series([x["value"] for x in rows], index=pd.to_datetime([x["startTime"] for x in rows], utc=True),
+                           dtype="float64").sort_index()
+    return out
+
+
+def build_renew(today, now):
+    """Hourly wind and solar output vs forecast for DK1, DK2 (Energinet Energi Data Service, no key) and FI
+    (Fingrid when FINGRID_API_KEY is set, otherwise ENTSO-E A75 actual / A69 day-ahead forecast)."""
+    a, b = _cet_bounds(today - dt.timedelta(days=2), today + dt.timedelta(days=2))
+    idx = pd.date_range(a, b, freq="1h", inclusive="left")
+    now_h = pd.Timestamp(now).floor("1h")
+    res = dict(t0=_ts(idx[0]), n=len(idx), zones={}, errors=[])
+
+    def hourly(s, need=None):
+        if s is None or not len(s):
+            return None
+        h = s.resample("1h").mean()
+        if need:                                   # drop the latest hour while it is still incomplete
+            c = s.resample("1h").count()
+            h = h[(c >= need) | (h.index < c.index[-1])]
+        return _hourly(h, idx)
+
+    try:
+        act = _eds("ElectricityProdex5MinRealtime", a, min(b, now_h + pd.Timedelta(hours=1)), {"PriceArea": ["DK1", "DK2"]},
+                   ["Minutes5UTC", "PriceArea", "OffshoreWindPower", "OnshoreWindPower", "SolarPower"])
+        fc = _eds("Forecasts_Hour", a, b, {"PriceArea": ["DK1", "DK2"], "ForecastType": ["Offshore Wind", "Onshore Wind", "Solar"]},
+                  ["HourUTC", "PriceArea", "ForecastType", "ForecastDayAhead"])
+        for z in ("DK1", "DK2"):
+            zr = dict(src="Energi Data Service (Energinet)", fc="day-ahead")
+            x = act[act["PriceArea"] == z] if len(act) else act
+            if len(x):
+                x = x.assign(t=pd.to_datetime(x["Minutes5UTC"], utc=True)).set_index("t").sort_index()
+                wind = x[["OffshoreWindPower", "OnshoreWindPower"]].astype(float).sum(axis=1, min_count=1)
+                zr["wind"] = hourly(wind, 12)
+                zr["solar"] = hourly(x["SolarPower"].astype(float), 12)
+            y = fc[fc["PriceArea"] == z] if len(fc) else fc
+            if len(y):
+                y = y.assign(t=pd.to_datetime(y["HourUTC"], utc=True))
+                p = y.pivot_table(index="t", columns="ForecastType", values="ForecastDayAhead", aggfunc="last")
+                wcols = [c for c in ("Offshore Wind", "Onshore Wind") if c in p.columns]
+                if wcols:
+                    zr["wind_fc"] = _hourly(p[wcols].sum(axis=1, min_count=1), idx)
+                if "Solar" in p.columns:
+                    zr["solar_fc"] = _hourly(p["Solar"], idx)
+            if len(zr) > 2:
+                res["zones"][z] = zr
+    except Exception as e:
+        res["errors"].append(dict(part="Energi Data Service", error=str(e)[:160]))
+        log(f"renew EDS: {e}")
+
+    key = (os.environ.get("FINGRID_API_KEY") or "").strip()
+    res["fingrid_key"] = bool(key)
+    fi = None
+    if key:
+        try:
+            f = fingrid_wind(key, a, b)
+            fi = dict(src="Fingrid open data (CC BY 4.0)", fc="latest", wind=hourly(f["wind"], 4), wind_fc=hourly(f["wind_fc"]))
+        except Exception as e:
+            res["errors"].append(dict(part="Fingrid", error=_redact(e)[:160]))
+            log(f"renew Fingrid: {_redact(e)}")
+    if fi is None and _token():
+        try:
+            fi = dict(src="ENTSO-E Transparency (A75 actual, A69 day-ahead forecast)", fc="day-ahead")
+            items = [it for it in entsoe_get(dict(documentType="A75", processType="A16", in_Domain=ENTSOE_EIC["FI"],
+                                                  **_period(today - dt.timedelta(days=2), today + dt.timedelta(days=1)))) if it["is_in"]]
+            by = {}
+            for it in items:
+                by.setdefault(PSR.get(it["psr"], "other"), []).append(it["s"])
+            for k in ("wind", "solar"):
+                if by.get(k):
+                    fi[k] = hourly(_sum(by[k]))
+            by = {}
+            for it in entsoe_get(dict(documentType="A69", processType="A01", in_Domain=ENTSOE_EIC["FI"],
+                                      **_period(today - dt.timedelta(days=2), today + dt.timedelta(days=2)))):
+                by.setdefault(PSR.get(it["psr"], "other"), []).append(it["s"])
+            for k in ("wind", "solar"):
+                if by.get(k):
+                    fi[k + "_fc"] = hourly(_sum(by[k]))
+        except PermissionError:
+            raise
+        except Exception as e:
+            res["errors"].append(dict(part="ENTSO-E FI", error=_redact(e)[:160]))
+            log(f"renew ENTSO-E FI: {_redact(e)}")
+    if fi and len(fi) > 2:
+        res["zones"]["FI"] = fi
+    if not res["zones"]:
+        raise RuntimeError("; ".join(e["error"] for e in res["errors"])[:300] or "no wind/solar data")
+    return res
+
+
 # ------------------------------------------------------------------ main
 def main():
     ap = argparse.ArgumentParser()
@@ -1084,6 +1465,7 @@ def main():
     ap.add_argument("--eex-csv", default=None)
     ap.add_argument("--skip-spot", action="store_true")
     a = ap.parse_args()
+    T0 = time.time()
     now = dt.datetime.now(UTC)
     today = now.astimezone(CET).date()
     prev = {}
@@ -1110,15 +1492,22 @@ def main():
     hydro = section("hydro_no", build_hydro_no)
     hydro_se = section("hydro_se", build_hydro_se)
     out["hydro"] = dict(no=hydro, se=hydro_se)
-    ent_px, ent_st = {}, []
+    ent_px, ent_st, src_of = {}, [], {}
     if _token():
         r = section("entsoe_prices", entsoe_prices, today)
         if r:
             ent_px, ent_st = r
+    # DK1/DK2 day-ahead from the TSO (Energinet Energi Data Service); ENTSO-E fills older days
+    dk = section("eds_dk", eds_prices, (today - dt.timedelta(days=32)).isoformat(), (today + dt.timedelta(days=2)).isoformat())
+    for z in ("DK1", "DK2"):
+        s_ = (dk or {}).get(z)
+        if s_ is not None and len(s_):
+            ent_px[z] = s_.combine_first(ent_px[z]) if z in ent_px else s_
+            src_of[z] = "Energi Data Service"
     if a.skip_spot and prev.get("spot"):
         out["spot"], out["capture"] = prev.get("spot"), prev.get("capture")
     else:
-        spot = section("spot", build_spot, today, ent_px, ent_st)
+        spot = section("spot", build_spot, today, ent_px, ent_st, src_of)
         if spot:
             merge_spot_history(spot, prev.get("spot") or {}, today)
             raw = spot.pop("raw")
@@ -1130,15 +1519,24 @@ def main():
             out["spot"] = prev.get("spot")
             if out["spot"]:
                 out["spot"]["stale"] = True
+    out["nordpool"] = section("nordpool", build_nordpool, today, prev.get("nordpool")) \
+        or (dict(prev["nordpool"], stale=True) if prev.get("nordpool") else None)
+    out["nuclear"] = section("nuclear", build_nuclear, now, today) \
+        or (dict(prev["nuclear"], stale=True) if prev.get("nuclear") else None)
     out["svk"] = section("svk", build_svk, today)
     out["entsoe"] = section("entsoe", build_entsoe, today, now, ent_px, prev.get("entsoe") or {}) \
         or (dict(prev["entsoe"], stale=["all"]) if (prev.get("entsoe") or {}).get("enabled") else dict(enabled=False, reason="failed"))
+    out["hydro_bal"] = (section("hydro_bal", build_hydro_bal, today, hydro) if _token() else None) \
+        or (dict(prev["hydro_bal"], stale=True) if prev.get("hydro_bal") else None)
+    out["renew"] = section("renew", build_renew, today, now) \
+        or (dict(prev["renew"], stale=True) if prev.get("renew") else None)
     ok_parts = [k for k in ("eex",) if out.get(k)] + (["spot"] if out.get("spot") and out["spot"].get("zones") else []) \
         + (["hydro"] if hydro else [])
     if not ok_parts:
         log("nothing worked - not overwriting")
         return 2
     os.makedirs(os.path.dirname(a.out), exist_ok=True)
+    out["build_s"] = round(time.time() - T0)
     with open(a.out + ".tmp", "w") as f:
         json.dump(out, f, ensure_ascii=False, separators=(",", ":"), allow_nan=False)
     os.replace(a.out + ".tmp", a.out)

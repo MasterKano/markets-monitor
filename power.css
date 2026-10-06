@@ -189,3 +189,19 @@ tr.is-now .pw-now,.pw-now.on{background:var(--accent);border-color:var(--accent)
 .pw-card>.pw-keys.pw-pad{margin:-2px 0 2px}
 .pw-mix>.pw-mini-h{margin-top:0}
 @media(max-width:760px){.pw-card-sub{font-size:10px}.pw-ttl{flex-basis:100%}}
+/* Nordic balance block (nuclear, hydro vs normal, system price) + DK/FI wind */
+.pw-h-top{margin-top:6px}
+.pw-grid-bal{grid-template-columns:repeat(3,minmax(0,1fr))}
+.pw-kpis-bal{grid-template-columns:repeat(auto-fit,minmax(180px,1fr))}
+.pw-kpi.pw-b{border-color:color-mix(in srgb,#4f8cff 35%,var(--border));background:linear-gradient(160deg,color-mix(in srgb,#4f8cff 10%,var(--panel)),var(--panel) 65%)}
+.pw-kpi.pw-kk{box-shadow:var(--shadow),inset 3px 0 0 #4f8cff}
+.pw-tbl tr.sys th.c-z{color:#f08848}.pw-heat tr.sys .c-z{color:#f08848}.pw-heat tr.sys td,.pw-heat tr.sys th{border-bottom:2px solid var(--panel)}
+.pw-tbl tr.sys th,.pw-tbl tr.sys td{border-bottom:1px solid var(--border-strong)}
+.pw-nuc td b{font-weight:700}.pw-nuc td .pw-mut,.pw-sys td.pw-mut{font-weight:500}
+.pw-hyb tr.sum td b{font-weight:800}
+.pw-explain{margin:var(--gap) 0 0}.pw-explain .explain-grid{grid-template-columns:repeat(auto-fit,minmax(230px,1fr))}
+.pw-dot.warn{background:var(--amber,#f0b429);box-shadow:0 0 0 3px color-mix(in srgb,var(--amber,#f0b429) 25%,transparent)}.warn-t{color:var(--amber,#f0b429);font-weight:650}
+#pwRen .pw-card-head .pw-seg{margin-left:auto}
+@media(max-width:1280px){.pw-grid-bal{grid-template-columns:repeat(2,minmax(0,1fr))}.pw-grid-bal>#pwSys{grid-column:1/-1}}
+@media(max-width:860px){.pw-grid-bal{grid-template-columns:1fr}.pw-grid-bal>#pwSys{grid-column:auto}}
+@media(max-width:760px){.pw-kpis-bal{grid-template-columns:repeat(2,minmax(0,1fr))}.pw-nuc th,.pw-nuc td,.pw-hyb th,.pw-hyb td,.pw-sys th,.pw-sys td{padding:0 5px}}

@@ -4,8 +4,8 @@ run-name: "Update market data (${{ inputs.mode || ((startsWith(github.event.sche
 
 on:
   schedule:
-    # UTC. Weekdays ~05:30 (pre-Europe open), ~12:30 (Nordic Power only: tomorrow's day-ahead prices
-    # and the day's EEX settlements) and ~21:00 (after US close; markets + news only).
+    # UTC. Weekdays ~05:30 (pre-Europe open), ~12:30 (Nordic Power only: tomorrow's day-ahead prices; EEX settlements
+    # are as of the last scrape, which runs in the evening after EEX publishes) and ~21:00 (after US close; markets + news only).
     # Weekends ~12:30: Nordic Power only (day-ahead auctions run every day).
     # Daily ~17:30 UTC (19:30 CEST / 18:30 CET): Nordic Power only, after the ENTSO-E deadline for tomorrow's day-ahead
     # wind/solar forecast (A69, D-1 18:00 Brussels time = 16:00 UTC summer / 17:00 UTC winter), so SE4 'tomorrow
@@ -60,14 +60,17 @@ jobs:
         if: env.MODE != 'power'
         run: python scripts/build_news.py
         continue-on-error: true
-      - name: Nordic power (ENTSO-E, EEX CSV, day-ahead, hydro)
+      - name: Nordic power (ENTSO-E, Nord Pool, UMM, EDS, EEX CSV, hydro)
         # ENTSO-E is the primary day-ahead source (~1-2 min); Energy-Charts (~2 req/min) only fills failed zones.
+        # Nord Pool prices/UMM and Energinet EDS are keyless; FI wind uses Fingrid when FINGRID_API_KEY is set, else ENTSO-E.
         # Skipped at 21:00.
         if: env.MODE != 'market'
         run: python scripts/build_power.py
         env:
           # ENTSO-E Transparency: day-ahead prices, SE4 wind/load/flows/outages, reservoirs (skipped when unset)
           ENTSOE_API_TOKEN: ${{ secrets.ENTSOE_API_TOKEN }}
+          # Fingrid open data (data.fingrid.fi), FI wind actual + forecast; optional (ENTSO-E fallback when unset)
+          FINGRID_API_KEY: ${{ secrets.FINGRID_API_KEY }}
         timeout-minutes: 15
         continue-on-error: true
       - name: Symbol search index (Markets autofill)
