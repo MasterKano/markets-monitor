@@ -40,3 +40,19 @@ select,.button,input{border:1px solid var(--border);background:var(--panel-deep)
 .chips{display:flex;flex-wrap:wrap;gap:6px}.chip{min-height:30px;padding:4px 10px;border:1px solid var(--border);border-radius:999px;background:var(--panel);color:var(--muted);font-size:12px;cursor:pointer}.chip.is-on,.chip:hover{color:var(--text);border-color:var(--accent)}.chip.is-on{background:var(--accent-soft)}
 .mobile-nav strong{font-size:13px;font-weight:650}
 @media(max-width:760px){body{padding:13px}.dashboard,.dashboard.is-stacked{grid-template-columns:1fr}.panel{height:62dvh}.panel-markets .panel-head{grid-template-columns:1fr}.panel-markets .panel-controls{width:100%}.panel-markets .panel-search{flex:1;width:auto}.panel-search .suggest{left:0;min-width:0}.mobile-nav{display:flex}body.is-phone-focus .panel{display:none}body.is-phone-focus .panel.is-phone-active{display:flex;height:min(72dvh,760px)}.toolbar-spacer,.layout-button{display:none}}
+/* Top-level navigation: Equities · Macro · Power · Charts */
+.main-nav{display:inline-flex;gap:2px;padding:3px;border:1px solid var(--border);border-radius:10px;background:var(--panel-deep)}
+.main-tab{min-height:32px;padding:5px 16px;border:0;border-radius:7px;background:transparent;color:var(--muted);font-size:13px;font-weight:700;letter-spacing:.1px;cursor:pointer;transition:background .15s,color .15s,box-shadow .15s}
+.main-tab:hover{color:var(--text)}
+.main-tab.is-on{color:var(--text);background:var(--accent-soft);box-shadow:inset 0 0 0 1px var(--accent)}
+.main-tab:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+.chart-tools{display:contents}body:not([data-page=monitor]) .chart-tools{display:none}
+.field-label{display:inline-flex;flex-direction:column;line-height:1.15}.field-hint{color:var(--faint);font-size:9.5px;font-weight:600}
+@media(max-width:760px){.main-nav{flex:1 1 100%;order:-1}.main-tab{flex:1;padding:5px 4px;font-size:13px}.toolbar{gap:7px;min-height:0}}
+body[data-page=monitor] .connection{display:none}
+@media(max-width:760px){
+ .main-nav{flex:1 1 0;min-width:0;order:-2}.toolbar .toolbar-spacer{display:none}
+ #themeButton,#refreshButton{order:-1;width:36px;min-width:36px;padding:0;font-size:0;line-height:1}
+ #themeButton::before{content:"◐";font-size:16px}#refreshButton::before{content:"↻";font-size:17px}
+ .chart-tools .field{flex:1 1 100%;justify-content:space-between}.chart-tools select{flex:1;max-width:62%}
+}
