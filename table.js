@@ -26,6 +26,13 @@ const NA='<span class="na">n/a</span>';
 const isNum=v=>typeof v==="number"&&isFinite(v);
 const gf=new Intl.DateTimeFormat("en-GB",{timeZone:TZ,weekday:"short",day:"2-digit",month:"short",hour:"2-digit",minute:"2-digit",hour12:false});
 const gfs=new Intl.DateTimeFormat("en-GB",{timeZone:TZ,day:"2-digit",month:"short",hour:"2-digit",minute:"2-digit",hour12:false});
+const gft=new Intl.DateTimeFormat("en-GB",{timeZone:TZ,hour:"2-digit",minute:"2-digit",hour12:false});
+const gfd=new Intl.DateTimeFormat("en-GB",{timeZone:"UTC",day:"2-digit",month:"short"});
+/* quote time label: market open with a quote today -> time of last quote (Geneva); otherwise "close DD Mon" */
+function quoteLabel(r){if(!r||r.error||!isNum(r.px))return null;const ST={open:"Market open",pre:"Pre-market",post:"After hours",closed:"Market closed"};
+ const keep=r.stale?" · kept from the last full build":"";
+ if(r.partial===true&&r.market_time){const t=new Date(r.market_time);return{txt:gft.format(t),tip:"Market open · last quote "+gfs.format(t)+" Geneva (Yahoo, ~15 min delayed)"+keep};}
+ const d=r.bar_date?gfd.format(new Date(r.bar_date+"T12:00:00Z")):"";return d?{txt:"close "+d,tip:[ST[r.state],"last close "+d].filter(Boolean).join(" · ")+keep}:null;}
 function ago(iso){const m=(Date.now()-new Date(iso).getTime())/6e4;if(!isFinite(m))return"";if(m<1)return"just now";if(m<60)return Math.round(m)+"m ago";if(m<48*60)return Math.round(m/60)+"h ago";return Math.round(m/1440)+"d ago";}
 function dp(v,kind){const a=Math.abs(v);if(kind==="fx"&&a<20)return 4;if(a>=10000)return 0;if(a>=1000)return 1;if(a>=1)return 2;if(a>=0.1)return 3;return 4;}
 function fpx(v,kind){if(!isNum(v))return NA;const d=dp(v,kind);return v.toLocaleString("en-US",{minimumFractionDigits:d,maximumFractionDigits:d});}
@@ -52,14 +59,14 @@ PCT.forEach(k=>val["p"+k]=r=>r.kind==="yield"&&r.bp?r.bp[k]:r.pct&&r.pct[k]);
 [10,20,50,200].forEach(n=>val["m"+n]=r=>r.ma&&r.ma[n]?(r.kind==="yield"?r.ma[n].bp:r.ma[n].pct):null);
 const COLS=[
  {k:"name",g:"",l:"Instrument",cls:"c-name"},
- {k:"px",g:"",l:"Last",cls:"num c-px",t:"Latest daily close from Yahoo Finance, local currency (delayed ~15 min on most non-US venues)"},
+ {k:"px",g:"",l:"Last",cls:"num c-px",t:"Latest Yahoo quote, local currency (~15 min delayed), refreshed every 15 min in market hours. Grey: time of the last quote (Geneva) while the market is open, otherwise the date of the last close."},
  {k:"mcap",g:"",l:"Mkt cap €",cls:"num c-mcap",t:"Market capitalization converted to EUR (Yahoo; FX from Yahoo EUR crosses or ECB mid). Hover for original currency."},
  {k:"ev",g:"",l:"EV €",cls:"num c-ev",t:"Enterprise value converted to EUR when Yahoo provides it. Hover for original currency."},
  {k:"spark",g:"price",l:"1Y",t:"1-year daily close sparkline (sorts by 1Y %)",cls:"c-spark"},
  {k:"chg",g:"price",l:"1D chg",t:"Change vs previous close. Yields in bp."},
  ...PCT.map(k=>({k:"p"+k,g:"price",l:k==="1D"?"1D %":k,hz:k,
    t:(k==="YTD"?"Since prior year-end close":"Price return over "+k)+(k==="10Y"?". Futures: continuous front month, roll-affected (†)":"")+". Yields shown as bp change."})),
- {k:"vlast",g:"vol",l:"Last vol",t:"Volume of the latest session"},
+ {k:"vlast",g:"vol",l:"Last vol",t:"Volume of the latest session (today so far while the market is open)"},
  ...[5,20,50].map(n=>({k:"v"+n,g:"vol",l:n+"d avg",t:"Average volume of the "+n+" sessions before the latest; ratio = last ÷ average (highlighted > 1.5x)"})),
  ...[10,20,50,200].map(n=>({k:"m"+n,g:"ma",l:n+"d MA",t:"Price vs "+n+"-day simple moving average (●above / ●below). MA value in tooltip."})),
 ];
@@ -81,7 +88,7 @@ function cell(c,r,S){const k=c.k,hid=c.hide?" c-opt":"";
   const co=isCo(r);const nm=co?'<button type="button" class="nm co-link" aria-label="'+esc(r.name+": company profile")+'">'+esc(r.name)+'</button>':'<span class="nm">'+esc(r.name)+'</span>';
   return'<th scope="row" class="c-name'+(co?" has-co":"")+'"'+(r.note?' title="'+esc(r.name+" — "+r.note+(co?" · click for company profile":""))+'"':' title="'+esc(r.name+(co?" · click for company profile":r.bar_date?" · last bar "+r.bar_date:""))+'"')+'>'+nm+flags+'<span class="sym">'+esc(sub)+'</span></th>';}
  if(r.error&&k!=="name")return'<td class="na-cell'+hid+'">'+NA+'</td>';
- if(k==="px")return'<td class="num px c-px">'+fpx(r.px,r.kind)+'</td>';
+ if(k==="px"){const q=quoteLabel(r);return'<td class="num px c-px"'+(q?' title="'+esc(q.tip)+'"':"")+'>'+fpx(r.px,r.kind)+(q?'<span class="qt">'+esc(q.txt)+'</span>':"")+'</td>';}
  if(k==="mcap"){const v=r.mcap_eur;return'<td class="num c-mcap"'+(isNum(v)?' title="'+esc(fundTip(r,"mcap"))+'"':"")+'>'+feur(v)+'</td>';}
  if(k==="ev"){const v=r.ev_eur;return'<td class="num c-ev"'+(isNum(v)?' title="'+esc(fundTip(r,"ev"))+'"':"")+'>'+feur(v)+'</td>';}
  if(k==="spark")return'<td class="c-spark" title="1Y: '+esc(fpct(r.pct&&r.pct["1Y"]).replace(/<[^>]+>/g,""))+(r.spark_from?" (from "+r.spark_from+")":"")+'">'+spark(r)+'</td>';
@@ -89,7 +96,7 @@ function cell(c,r,S){const k=c.k,hid=c.hide?" c-opt":"";
  if(k[0]==="p"){const hz=c.hz;const y=r.kind==="yield";const v=y?(r.bp&&r.bp[hz]):(r.pct&&r.pct[hz]);
   const roll=hz==="10Y"&&r.roll&&isNum(v);const tip=roll?' title="Continuous front-month futures: 10Y figure is roll-affected"':y&&isNum(r.pct&&r.pct[hz])?' title="'+esc(fpct(r.pct[hz]))+' relative change in yield"':"";
   return'<td class="num heat'+hid+'"'+heat(v,y?S.bp[hz]:S.pct[hz])+tip+'>'+(y?fbp(v):fpct(v))+(roll?'<sup>†</sup>':"")+'</td>';}
- if(k==="vlast")return'<td class="num">'+(r.vol&&isNum(r.vol.last)?fvol(r.vol.last):NA)+'</td>';
+ if(k==="vlast")return'<td class="num"'+(r.partial?' title="Today so far (market open); ratios compare a partial day with full-day averages"':"")+'>'+(r.vol&&isNum(r.vol.last)?fvol(r.vol.last):NA)+'</td>';
  if(k[0]==="v"){const n=k.slice(1);const a=r.vol&&r.vol["a"+n],x=r.vol&&r.vol["r"+n];if(!isNum(a))return'<td class="num'+hid+'">'+NA+'</td>';
   return'<td class="num vol'+hid+(isNum(x)&&x>1.5?" hot":"")+'" title="'+n+'d avg volume '+a.toLocaleString("en-US")+(isNum(x)?" · last = "+x.toFixed(2)+"x":"")+'"><span class="ratio">'+(isNum(x)?x.toFixed(1)+"x":"n/a")+'</span><span class="avg">'+fvol(a)+'</span></td>';}
  if(k[0]==="m"){const n=k.slice(1);const m=r.ma&&r.ma[n];if(!m)return'<td class="num'+hid+'" title="Not enough history for a '+n+'d MA">'+NA+'</td>';
@@ -127,7 +134,7 @@ function bindTable(tbl,all){
  const pick=(tr,e)=>{const r=all.find(x=>x.sym===tr.dataset.sym);if(!r)return;if(e&&e.target.closest&&e.target.closest("th.has-co")&&isCo(r)){window.MMCompany.open(r.sym);return;}openChart(r);};
  tbl.querySelectorAll("tbody tr[data-sym]").forEach(tr=>{tr.onclick=e=>pick(tr,e);tr.onkeydown=e=>{if(e.key==="Enter"&&e.target===tr)open(tr);};});}
 function footNote(all,rates){const futs=all.some(r=>r.roll);const fxN=DATA.fx_asof&&!isMacro()?(" Cap/EV in EUR (FX as of "+DATA.fx_asof+")."):" ";
- $("tblFoot").innerHTML='Prices delayed ~15 min (Yahoo). Price returns from daily closes (not total return).'+fxN+(futs?' † Continuous front-month futures: long-horizon (esp. 10Y) figures include roll effects.':"")+(rates?" Yield rows show changes and MA distance in basis points.":"")+' n/a = not available from source or not enough history. '+(isMacro()?'Click a row for its chart.':'Click a company name for its profile (valuation, consensus, financials); click elsewhere in the row for its chart.');}
+ $("tblFoot").innerHTML='Prices: Yahoo quotes (~15 min delayed), refreshed every 15 min in market hours; grey time = last quote (Geneva) while open. Price returns from daily closes (not total return).'+fxN+(futs?' † Continuous front-month futures: long-horizon (esp. 10Y) figures include roll effects.':"")+(rates?" Yield rows show changes and MA distance in basis points.":"")+' n/a = not available from source or not enough history. '+(isMacro()?'Click a row for its chart.':'Click a company name for its profile (valuation, consensus, financials); click elsewhere in the row for its chart.');}
 function renderTable(){if(isMacro())return renderMacro();const tbl=$("tbl");const g=grp(st.eq)||grp(EQ[0][0])||DATA.groups[0];st.eq=g.id;const all=g.sections.flatMap(s=>s.rows);const S=scales(all);
  const V=visCols();tbl.innerHTML=tableHtml(g,V,S,st.q.trim().toLowerCase()).html;tbl.classList.remove("is-compact");bindTable(tbl,all);
  renderMovers(all);footNote(all,false);}
@@ -137,7 +144,7 @@ function renderMacro(){const box=$("macroWrap");const V=visCols(),q=st.q.trim().
   const tbl=$("macroT-"+id);tbl.innerHTML=r.html;bindTable(tbl,all);const ok=all.filter(x=>!x.error),up=ok.filter(x=>x.pct&&x.pct["1D"]>0).length;
   $("macroM-"+id).innerHTML='<span class="breadth" title="'+up+' up / '+(ok.filter(x=>x.pct&&x.pct["1D"]<0).length)+' down today"><i style="width:'+(ok.length?Math.round(up/ok.length*100):0)+'%"></i></span>'+all.length+' instruments';});
  renderMovers(allRows);footNote(allRows,true);}
-function renderStamp(){const el=$("tblStamp");if(!DATA){el.textContent="";return;}const d=new Date(DATA.generated_utc);el.innerHTML='<span class="stamp-dot"></span>Data updated <b>'+esc(gf.format(d))+'</b> Geneva · '+esc(ago(DATA.generated_utc))+(DATA.errors&&DATA.errors.length?' · <span title="'+esc(DATA.errors.map(e=>e.sym+": "+e.error).join("\n"))+'">'+DATA.errors.length+' missing</span>':"");$("footStamp").textContent="Table data updated "+gf.format(d)+" Geneva.";$("exAsOf").textContent=gf.format(d)+" Geneva";const fxEl=$("exFxAsOf");if(fxEl)fxEl.textContent=DATA.fx_asof||"n/a";}
+function renderStamp(){const el=$("tblStamp");if(!DATA){el.textContent="";return;}const d=new Date(DATA.generated_utc);el.title=DATA.fundamentals_utc?"Market cap / EV fundamentals as of "+gf.format(new Date(DATA.fundamentals_utc))+" Geneva (scaled with price since)":"";el.innerHTML='<span class="stamp-dot"></span>Data updated <b>'+esc(gf.format(d))+'</b> Geneva · '+esc(ago(DATA.generated_utc))+(DATA.errors&&DATA.errors.length?' · <span title="'+esc(DATA.errors.map(e=>e.sym+": "+e.error).join("\n"))+'">'+DATA.errors.length+' missing</span>':"");$("footStamp").textContent="Table data updated "+gf.format(d)+" Geneva.";$("exAsOf").textContent=gf.format(d)+" Geneva";const fxEl=$("exFxAsOf");if(fxEl)fxEl.textContent=DATA.fx_asof||"n/a";}
 function newsItems(){const T=(NEWS&&NEWS.tabs)||{};if(isPower())return T.power||[];if(!isMacro())return T[st.eq]||[];
  const seen=new Set();return MAC.flatMap(([id])=>T[id]||[]).filter(it=>{const k=it.url||it.title;if(seen.has(k))return false;seen.add(k);return true;}).sort((a,b)=>new Date(b.time)-new Date(a.time)).slice(0,24);}
 function renderNews(){const box=$("newsList"),hd=$("newsTitle"),meta=$("newsMeta");hd.textContent="News · "+(isPower()?"Nordic Power":isMacro()?"Macro":(EQ.find(e=>e[0]===st.eq)||[,""])[1]);
@@ -169,8 +176,12 @@ function closeChart(){$("chartModal").hidden=true;document.body.classList.remove
 
 /* ---------- load ---------- */
 async function getJSON(u){const r=await fetch(u+(u.includes("?")?"&":"?")+"t="+Math.floor(Date.now()/6e4),{cache:"no-cache"});if(!r.ok)throw Error(u+": HTTP "+r.status);return r.json();}
+/* intraday prices (every 15 min) are published to the live-data branch, not committed; use whichever file is newer */
+const LIVE="https://raw.githubusercontent.com/MasterKano/markets-monitor/live-data/market.json";
+async function getMarket(){const rs=await Promise.allSettled([getJSON("data/market.json"),getJSON(LIVE)]);const ok=rs.filter(x=>x.status==="fulfilled"&&x.value&&x.value.groups).map(x=>x.value);
+ if(!ok.length)throw rs[0].reason||Error("market.json");return ok.sort((x,y)=>new Date(y.generated_utc)-new Date(x.generated_utc))[0];}
 async function load(){const tbl=$("tbl");if(!DATA)tbl.innerHTML='<tbody><tr><td class="empty">Loading market data…</td></tr></tbody>';
- const[a,b]=await Promise.allSettled([getJSON("data/market.json"),getJSON("data/news.json")]);
+ const[a,b]=await Promise.allSettled([getMarket(),getJSON("data/news.json")]);
  if(a.status==="fulfilled")DATA=a.value;else if(!DATA)tbl.innerHTML='<tbody><tr><td class="empty">Could not load data/market.json ('+esc(a.reason&&a.reason.message)+'). If you opened the file directly, serve the folder over HTTP.</td></tr></tbody>';
  if(b.status==="fulfilled")NEWS=b.value;
  if(st.sort&&!val[st.sort])st.sort=null;renderAll();window.MMCompany&&window.MMCompany.ready();if(pendingSub){const s=pendingSub;pendingSub=null;scrollSub(s);}}
@@ -181,6 +192,9 @@ let ft;$("tblFilter").addEventListener("input",e=>{clearTimeout(ft);ft=setTimeou
 $("cmClose").onclick=closeChart;$("cmSimple").onclick=()=>{const f=$("cmFallback");f.hidden=!f.hidden;$("cmSimple").classList.toggle("is-on",!f.hidden);};$("chartModal").addEventListener("click",e=>{if(e.target.id==="chartModal")closeChart();});
 document.addEventListener("keydown",e=>{if(e.key==="Escape"&&!$("chartModal").hidden)closeChart();});
 setInterval(()=>DATA&&renderStamp(),60000);
+/* pick up new intraday prices while the page stays open (tables only re-render when the data changed) */
+setInterval(async()=>{if(document.hidden||!DATA)return;try{const d=await getMarket();if(d.generated_utc===DATA.generated_utc)return;DATA=d;renderStamp();
+ if(!isPower()&&document.body.dataset.page!=="monitor"){renderTabs();renderTable();}}catch(e){}},5*60000);
 /* ---------- navigation + URL hash ---------- */
 const curView=()=>document.body.dataset.page==="monitor"?"charts":st.view;
 let subHash=null;
@@ -201,7 +215,7 @@ function go(v,sub,fromHash){if(!VIEWS.includes(v))v="equities";subHash=(v==="mac
 document.querySelectorAll("#mainNav [data-v]").forEach(b=>b.onclick=()=>go(b.dataset.v));
 $("mainNav").addEventListener("keydown",e=>{if(e.key!=="ArrowRight"&&e.key!=="ArrowLeft")return;const bs=[...document.querySelectorAll("#mainNav [data-v]")];const i=bs.findIndex(b=>b.classList.contains("is-on"));const n=bs[(i+(e.key==="ArrowRight"?1:-1)+bs.length)%bs.length];n.focus();n.click();});
 window.addEventListener("hashchange",()=>{const r=parseHash();if(r)go(r.v,r.sub,true);});
-window.MMTable={data:()=>DATA,news:()=>NEWS,openChart:r=>openChart(r),reload:()=>{if(isPower()&&window.MMPower)window.MMPower.reload();return load();}};
+window.MMTable={quoteLabel,data:()=>DATA,news:()=>NEWS,openChart:r=>openChart(r),reload:()=>{if(isPower()&&window.MMPower)window.MMPower.reload();return load();}};
 {const r=parseHash();if(r){go(r.v,r.sub,true);writeHash();}else if(document.body.dataset.page==="monitor"){syncNav();writeHash();}else{go(st.view,null);}}
 load();
 })();
