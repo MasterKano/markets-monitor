@@ -281,3 +281,4 @@ body.co-open{overflow:hidden}
 .co-show-xs{display:none}
 @media(max-width:760px){.co-show-xs{display:inline}.co-tab{padding:8px 8px 10px}
  .co-est th:first-child,.co-est td:first-child{position:sticky;left:0;z-index:1;background:var(--panel)}}
+.co-tbl td.r small.co-ih-desc{display:block;margin-top:1px}
