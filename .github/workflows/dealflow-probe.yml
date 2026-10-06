@@ -1,0 +1,21 @@
+name: dealflow probe (temporary)
+on:
+  push:
+    branches: [dealflow]
+permissions:
+  contents: read
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: scripts/requirements.txt
+      - run: pip install -r scripts/requirements.txt
+      - name: fresh build (no reuse)
+        run: rm -f data/dealflow.json && time python scripts/build_dealflow.py
+      - run: python -c "import json;d=json.load(open('data/dealflow.json'));print(json.dumps(d['sources'],indent=1));print(d['seconds'],len(d['items']))"

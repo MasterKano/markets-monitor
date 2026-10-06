@@ -1,0 +1,51 @@
+/* Deal flow panel (Equities page) + announcement rows on the company page */
+.df-panel{display:none;margin-top:var(--gap);border:1px solid var(--border);border-radius:var(--radius);background:var(--panel);box-shadow:var(--shadow);overflow:hidden}
+body.view-equities .df-panel{display:block}
+.df-head{display:flex;align-items:baseline;justify-content:space-between;gap:10px;flex-wrap:wrap;padding:11px 14px 9px;border-bottom:1px solid var(--border);background:var(--panel-deep);box-shadow:inset 0 2px 0 color-mix(in srgb,var(--violet) 60%,transparent)}
+.df-head h2{margin:0;font-size:15px;letter-spacing:.01em}.df-head h2 small{margin-left:8px;color:var(--muted);font-size:12px;font-weight:500}
+.df-meta{color:var(--faint);font-size:11.5px}
+.df-body{padding:12px 14px 6px}
+/* type palette (shared by pills, chart and chips) */
+.t-ma{--t:var(--violet)}.t-raise{--t:var(--amber)}.t-ppa{--t:var(--good)}.t-financing{--t:var(--accent)}.t-project{--t:#22b8c9}
+.t-results{--t:var(--muted)}.t-insider{--t:#e3739b}.t-other{--t:var(--faint)}
+[data-theme=light] .t-project{--t:#0d8fa0}[data-theme=light] .t-insider{--t:#c2457a}[data-theme=light] .t-raise{--t:#b9800a}
+.df-fig{margin:0 0 12px}.df-fig figcaption{display:flex;flex-direction:column;gap:2px;margin-bottom:7px}
+.df-fig-t{font-size:12.5px;font-weight:650;color:var(--text)}.df-fig-u{color:var(--muted);font-weight:500}.df-fig-sub{font-size:11px;color:var(--faint)}
+.df-bar{display:flex;gap:2px;height:22px;border-radius:5px;overflow:hidden}
+.df-bar button{min-width:4px;border:0;padding:0;background:color-mix(in srgb,var(--t) 72%,var(--panel));color:#fff;font:600 11px/22px inherit;font-variant-numeric:tabular-nums;cursor:pointer;text-shadow:0 1px 1px rgba(0,0,0,.35)}
+.df-bar button:hover,.df-bar button.is-on{background:var(--t)}.df-bar:has(.is-on) button:not(.is-on){opacity:.45}
+.df-ctl{display:flex;flex-direction:column;gap:7px;margin-bottom:8px}
+.df-chips{display:flex;flex-wrap:wrap;gap:5px}.df-chips .chip{min-height:26px;padding:2px 10px;font-size:11.5px;display:inline-flex;align-items:center;gap:5px}
+.df-chips .chip small{color:var(--faint);font-size:10.5px;font-variant-numeric:tabular-nums}.df-chips .chip.is-on small{color:inherit;opacity:.75}
+.df-tchip i{width:8px;height:8px;border-radius:2px;background:var(--t)}
+.df-tchip.is-on{border-color:color-mix(in srgb,var(--t) 70%,transparent);background:color-mix(in srgb,var(--t) 16%,var(--panel));color:var(--text)}
+.df-ren.is-on{border-color:color-mix(in srgb,var(--good) 60%,transparent);background:color-mix(in srgb,var(--good) 14%,var(--panel));color:var(--text)}
+.df-list{list-style:none;margin:0;padding:0}
+.df-item{display:grid;grid-template-columns:98px 66px minmax(0,1fr) auto;gap:4px 10px;align-items:baseline;padding:8px 0;border-top:1px solid var(--border)}
+.df-list .df-item:first-child{border-top:0}
+.df-item time{color:var(--muted);font-size:11.5px;font-variant-numeric:tabular-nums;white-space:nowrap}
+.df-type{justify-self:start;padding:1px 7px;border-radius:999px;border:1px solid color-mix(in srgb,var(--t) 55%,transparent);background:color-mix(in srgb,var(--t) 14%,transparent);color:color-mix(in srgb,var(--t) 70%,var(--text));font-size:10.5px;font-weight:650;white-space:nowrap}
+.df-main{min-width:0;font-size:13px;line-height:1.4}
+.df-co{margin:0 7px 0 0;padding:0;border:0;background:none;color:var(--text);font:inherit;font-weight:650;cursor:pointer}
+.df-co:hover{color:var(--accent);text-decoration:underline}
+.df-h{color:var(--text);text-decoration:none;opacity:.92}.df-h:hover{color:var(--accent);text-decoration:underline;opacity:1}.df-ext{color:var(--faint);font-size:11px}
+.df-x{margin:3px 0 0;color:var(--muted);font-size:12px;line-height:1.45}
+.df-tags{display:flex;flex-wrap:wrap;gap:5px;margin-top:4px}
+.df-flag{padding:0 6px;border-radius:4px;background:color-mix(in srgb,var(--good) 14%,transparent);color:color-mix(in srgb,var(--good) 75%,var(--text));font-size:10.5px;font-weight:600;line-height:17px}
+.df-flag.f-solar{--good:var(--amber)}.df-flag.f-battery{--good:var(--violet)}.df-flag.f-datacentre{--good:var(--accent)}
+.df-mw{padding:0 6px;border-radius:4px;border:1px dashed var(--border-strong);color:var(--muted);font-size:11px;line-height:17px;cursor:help}.df-mw b{color:var(--text);font-weight:650}
+.df-src{color:var(--faint);font-size:10.5px;white-space:nowrap;text-align:right}
+.df-more{display:block;width:100%;margin:6px 0 4px;padding:7px;border:1px dashed var(--border);border-radius:6px;background:none;color:var(--muted);font-size:12px;font-weight:600;cursor:pointer}.df-more:hover{color:var(--text);border-color:var(--border-strong)}
+.df-empty{margin:10px 0;color:var(--muted);font-size:12.5px}
+.df-how{margin:8px 0 6px;border-top:1px solid var(--border);padding-top:7px}.df-how summary{color:var(--muted);font-size:12px;cursor:pointer}
+.df-how-body p{margin:7px 0;color:var(--muted);font-size:11.5px;line-height:1.5}.df-how-body b{color:var(--text);font-weight:600}
+/* company page variant */
+.co-sec .df-list .df-item{grid-template-columns:92px 62px minmax(0,1fr) auto}
+.co-sec .df-note{margin:6px 0 0;color:var(--faint);font-size:11.5px}
+@media (max-width:720px){
+ .df-body{padding:10px 10px 4px}
+ .df-item,.co-sec .df-list .df-item{grid-template-columns:auto 1fr auto;gap:3px 8px}
+ .df-item time{grid-column:1}.df-type{grid-column:2}.df-src{grid-column:3}.df-main{grid-column:1/-1}
+ .df-chips{flex-wrap:nowrap;overflow-x:auto;scrollbar-width:none;margin:0 -10px;padding:0 10px}.df-chips .chip{flex:none}
+}
+.co-fi-i{display:block;margin-top:2px;color:var(--faint);font-size:10.5px}

@@ -11,6 +11,7 @@
 <link rel="stylesheet" href="table.css?v=20261006g">
 <link rel="stylesheet" href="power.css?v=20261006p">
 <link rel="stylesheet" href="company.css?v=20261006g">
+<link rel="stylesheet" href="dealflow.css?v=20261007a">
 </head>
 <body>
 <div class="shell">
@@ -82,6 +83,10 @@
         <div class="ex-item ex-ma"><h3>Moving averages &amp; cap</h3><p>% vs N-day SMA: <span class="up">+%</span> above <i class="dot above"></i>, <span class="dn">−%</span> below <i class="dot below"></i>. <b>Mkt cap</b> / <b>EV</b> in EUR (Yahoo; FX as of <b id="exFxAsOf">…</b>). Yields in bp.</p></div>
       </div>
     </details>
+    <section class="df-panel" id="dfPanel" aria-labelledby="dfTitle">
+      <div class="df-head"><h2 id="dfTitle">Deal flow<small>Material company announcements</small></h2><span class="df-meta" id="dfMeta"></span></div>
+      <div class="df-body" id="dfBody"></div>
+    </section>
     <nav class="pw-subnav" id="pwSubnav" aria-label="Nordic Power sections"></nav>
     <div class="power-view" id="powerView"></div>
     <section class="news-panel" id="pwNews" aria-labelledby="newsTitle">
@@ -98,7 +103,11 @@
     </div>
     <main class="dashboard" id="dashboard"></main>
   </section>
+<<<<<<< HEAD
   <footer>Table: Yahoo Finance quotes and daily data via GitHub Actions (prices every 15 min in market hours). Nordic Power: EEX settlements, Nord Pool day-ahead prices and UMM, ENTSO-E Transparency day-ahead prices, SE4 wind/load/outages and reservoirs (Energy-Charts / Energi Data Service fallback), NVE hydro, Svenska kraftnät SE4 load/flows. <span id="footStamp"></span> Charts: TradingView widgets; exchanges TradingView won't embed for free (London, Hong Kong, TVC indices) get a simple chart drawn here from CNBC's delayed price bars. Treasury yields cannot be embedded, so the Rates chart uses bond ETFs and Table yield rows open a Yahoo 1Y chart. Markets search uses a static symbol index (LSE/AIM, OMX Stockholm, Oslo, NYSE/Nasdaq, TSX/TSXV, HKEX; works offline). TradingView lookup is tried when reachable; exotic names may need EXCH:SYM or in-chart search.</footer>
+=======
+  <footer>Table: Yahoo Finance quotes and daily data via GitHub Actions (prices every 15 min in market hours). Deal flow: NewsWeb, MFN, Nasdaq Nordic, Investegate, Yahoo news and the FI insider register (weekday morning + midday/evening power runs). Nordic Power: EEX settlements, ENTSO-E Transparency day-ahead prices, SE4 wind/load/outages and reservoirs (Energy-Charts / Energi Data Service fallback), NVE hydro, Svenska kraftnät SE4 load/flows. <span id="footStamp"></span> Charts: TradingView widgets; exchanges TradingView won't embed for free (London, Hong Kong, TVC indices) get a simple chart drawn here from CNBC's delayed price bars. Treasury yields cannot be embedded, so the Rates chart uses bond ETFs and Table yield rows open a Yahoo 1Y chart. Markets search uses a static symbol index (LSE/AIM, OMX Stockholm, Oslo, NYSE/Nasdaq, TSX/TSXV, HKEX; works offline). TradingView lookup is tried when reachable; exotic names may need EXCH:SYM or in-chart search.</footer>
+>>>>>>> f58427f (Add deal-flow feed for Renewables, Oil & Gas and Lundin names)
 </div>
 <div class="sr-only" id="appStatus" role="status"></div>
 <div class="co-layer" id="coLayer" hidden>
@@ -149,8 +158,14 @@
 <script src="pxchart.js?v=20261006a"></script>
 <script src="app.js?v=20261006e"></script>
 <script src="power-map.js?v=20261006c"></script>
+<<<<<<< HEAD
 <script src="power.js?v=20261006p"></script>
 <script src="company.js?v=20261006g"></script>
+=======
+<script src="power.js?v=20261006d"></script>
+<script src="dealflow.js?v=20261007a"></script>
+<script src="company.js?v=20261007a"></script>
+>>>>>>> f58427f (Add deal-flow feed for Renewables, Oil & Gas and Lundin names)
 <script src="table.js?v=20261006h"></script>
 </body>
 </html>

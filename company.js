@@ -223,7 +223,29 @@ function about(c,d){const a=(d&&d.about)||{};const p=(c&&c.profile)||{};
   ["Reporting currency",esc((c&&c.fin_ccy)||"—")]];
  return sec("coAbout","About",txt+kv(rows));}
 
-function overview(c,r,d){return chartSec(r)+glance(c,d)+valuation(c,r)+keyStats(c,r)+dates(c,d)+about(c,d)+news(c,r);}
+/* ---------- deal flow (dealflow.js / data/dealflow.json) ---------- */
+let dfWait=false;
+function deals(){const M=window.MMDeals;if(!M)return null;if(M.peek())return M;if(!dfWait){dfWait=true;const sym=cur;
+ M.load().then(()=>{dfWait=false;if(cur&&!layer().hidden){const b=$("coBody"),st=b.scrollTop;render();b.scrollTop=st;}}).catch(()=>{dfWait=false;});}return null;}
+function announcements(){if(!window.MMDeals)return"";const M=deals(),T="Announcements";
+ if(!M)return sec("coDeals",T,'<div class="co-skel"></div>');
+ const m=M.meta();if(!M.covered(cur))return sec("coDeals",T,empty("The announcements feed covers the Renewables, Oil & Gas and Lundin Group companies."));
+ const its=M.items(cur),rt=M.routineText(cur);
+ const body=its.length?'<ol class="df-list">'+limit("deals",its,5).map(it=>M.itemHtml(it,{co:false})).join("")+'</ol>'+moreBtn("deals",its.length,5):failMsg("No material announcements in the last "+m.days+" days.");
+ return sec("coDeals",T,body+'<p class="df-note">'+(rt?esc(rt.charAt(0).toUpperCase()+rt.slice(1))+". ":"")+'Type from fixed headline keyword rules; see “How items are chosen” under Deal flow on the Equities page.</p>',"",
+  "Last "+m.days+" days · newest first · "+esc(M.source(cur))+" · Geneva time");}
+const FI_K={buy:"Buy",sell:"Sell",subscription:"Subscription",grant:"Grant",exercise:"Exercise",dividend:"Dividend","gift in":"Gift received","gift out":"Gift given",pledge:"Pledge",exchange:"Exchange",internal:"Internal",inheritance:"Inheritance",loan:"Loan"};
+function fiSec(c){if(!window.MMDeals)return"";const M=deals();if(!M||!M.hasFi(cur))return"";
+ const rows=M.fi(cur)||[],m=M.meta(),T="Swedish insider register (FI)";
+ const sub="Last "+m.fiDays+" days · transaction date · aggregated per person, day, type and instrument · Finansinspektionen";
+ if(!rows.length)return sec("coFI",T,failMsg("No insider notifications to Finansinspektionen in the last "+m.fiDays+" days."),"",sub);
+ const tr=limit("fi",rows,5).map(x=>'<tr><td>'+dateCell(x.d)+'</td><td class="co-name-cell">'+esc(x.p)+'<small>'+esc([x.r,x.rel?"closely associated person":""].filter(Boolean).join(" · "))+'</small></td>'+
+  '<td><span class="co-act-pill k-'+(x.k==="buy"||x.k==="sell"?x.k:"other")+'">'+esc(FI_K[x.k]||x.k)+'</span><small class="co-fi-i">'+esc(x.i||"")+'</small></td>'+
+  '<td class="r">'+big(x.v)+'</td><td class="r co-hide-xs">'+(isNum(x.px)?fpx(x.px):DASH)+'</td><td class="r">'+(isNum(x.val)?big(x.val)+' <small>'+esc(x.c||"")+'</small>':DASH)+'</td></tr>').join("");
+ return sec("coFI",T,'<div class="co-fin-wrap"><table class="co-tbl co-tx"><thead><tr><th>Date</th><th>Person and role</th><th>Type</th><th class="r">Volume</th><th class="r co-hide-xs">Avg price</th><th class="r">Value</th></tr></thead><tbody>'+tr+'</tbody></table></div>'+moreBtn("fi",rows.length,5)+
+  fine("Notifications of managers' transactions (MAR art. 19) from the FI insider register; cancelled notices excluded. Avg price is volume-weighted across the day's notices."),"",sub);}
+
+function overview(c,r,d){return chartSec(r)+glance(c,d)+valuation(c,r)+keyStats(c,r)+dates(c,d)+announcements()+about(c,d)+news(c,r);}
 
 /* ---------- Financials ---------- */
 const STMT={
@@ -379,7 +401,7 @@ function insiderHolders(c,d){const h=d.ins_hold||[];if(!h.length)return"";
  const rows=limit("ih",h,5).map(x=>'<tr><td class="co-name-cell">'+esc(personName(x.n))+(x.rel?'<small>'+esc(x.rel)+'</small>':"")+'</td><td class="r"><b>'+big(x.pos)+'</b></td><td class="r co-hide-xs">'+dateCell(x.d)+(x.desc?'<small class="co-ih-desc">'+esc(x.desc)+'</small>':"")+'</td></tr>').join("");
  return sec("coIH","Insider holdings",'<div class="co-fin-wrap"><table class="co-tbl"><thead><tr><th>Insider</th><th class="r">Shares held <small>direct</small></th><th class="r co-hide-xs">Latest transaction</th></tr></thead><tbody>'+rows+'</tbody></table></div>'+moreBtn("ih",h.length,5));}
 function ownTab(c,r,d){if(!d)return'<div class="co-skel tall"></div>';const mc=majorCcy(c&&c.ccy);
- return ownership(c,d)+holdersTable("Inst",d.inst,mc,"Top institutional holders","Up to 10 largest, latest 13F-style filings via Yahoo")+holdersTable("Funds",d.funds,mc,"Top fund holders","Mutual funds and ETFs")+insiderActivity(c,d)+insiderTx(c,d)+insiderHolders(c,d);}
+ return ownership(c,d)+holdersTable("Inst",d.inst,mc,"Top institutional holders","Up to 10 largest, latest 13F-style filings via Yahoo")+holdersTable("Funds",d.funds,mc,"Top fund holders","Mutual funds and ETFs")+insiderActivity(c,d)+fiSec(c)+insiderTx(c,d)+insiderHolders(c,d);}
 
 /* ---------- Management ---------- */
 const BOARD_RE=/\b(chair|chairman|chairwoman|chairperson|director|board)\b/i;

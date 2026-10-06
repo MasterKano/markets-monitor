@@ -10,7 +10,7 @@ Top-level tabs (URL hash in brackets; older hashes such as `#nordic`, `#rates`, 
 
 - **Equities** (default, `#equities/<chip>`): chips Renewables (incl. benchmarks and strategic peers), Oil & Gas (incl. London-listed E&Ps),
   Metals & Mining, Lundin Group. Price returns 1D to 10Y, volume vs 5/20/50-day averages (ratio highlighted above 1.5x),
-  distance from 10/20/50/200-day moving averages, a 1-year sparkline, market cap / EV in EUR, company panel and news.
+  distance from 10/20/50/200-day moving averages, a 1-year sparkline, market cap / EV in EUR, company panel, news and a Deal flow panel (material announcements for the Renewables, Oil & Gas and Lundin Group names).
 - **Macro** (`#macro[/indices|commodities|rates]`): Indices, Commodities and Rates & FX as sections on one page (no
   company data), merged macro news.
   Heatmap colours are scaled per horizon. Click a header to sort, a row to open its TradingView chart.
@@ -49,6 +49,16 @@ news only), and on demand, and commits:
   raw.githubusercontent.com (using whichever of that and `data/market.json` is newer).
 - `data/news.json` from `scripts/build_news.py`: Google News RSS searches plus exchange announcements
   (Oslo Børs NewsWeb, Nasdaq Nordic). Headlines and links only. FT excluded.
+- `data/dealflow.json` from `scripts/build_dealflow.py` (05:30 full + 12:30/17:30 power runs): material
+  corporate announcements for the Renewables (incl. strategic peers), Oil & Gas (incl. London E&Ps) and
+  Lundin Group companies, last 30 days. Sources (keyless, public): Oslo Børs NewsWeb JSON, MFN
+  (`mfn.se`), Nasdaq Nordic / GlobeNewswire, Investegate RNS for London names, Yahoo Finance news for
+  other EU/US/Canada names, and the FI insider register CSV (`fi.se`) for Swedish issuers. Each headline
+  is typed by fixed keyword rules (M&A, capital raise, PPA, financing, insider, results, project, other);
+  routine notices (buybacks, AGM, Form 8.3, calendars) are collapsed into counts. Solar/wind/battery/
+  data-centre flags and an indicative €/MW (when one sentence states both amount and capacity) are
+  attached. The Equities page shows a filterable Deal flow panel; each company page shows an
+  Announcements section, and Swedish names get a FI insider table on Ownership & insiders.
 - `data/companies.json` + `data/co/SYMBOL.json` from `scripts/build_companies.py` (05:30 and 21:00 runs): the
   company page (click a company name in the Table; shareable as `#co=SYMBOL&tab=fin|analysts|own|mgmt`).
   `companies.json` is a small index (price, valuation, consensus, key stats, dates) read with the Table;
@@ -85,5 +95,5 @@ news only), and on demand, and commits:
     UTC on Saturdays and Sundays, and daily at 17:30 UTC, after the D-1 18:00 Brussels deadline for the day-ahead
     wind/solar forecast (A69), so the SE4 "tomorrow expected" capture row fills in.
 
-Local run: `pip install -r scripts/requirements.txt && python scripts/build_data.py && python scripts/build_news.py && python scripts/build_power.py && python scripts/build_symbols.py && python scripts/build_companies.py`,
+Local run: `pip install -r scripts/requirements.txt && python scripts/build_data.py && python scripts/build_news.py && python scripts/build_dealflow.py && python scripts/build_power.py && python scripts/build_symbols.py && python scripts/build_companies.py`,
 then `python -m http.server` and open http://localhost:8000/.
