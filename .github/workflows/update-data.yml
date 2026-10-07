@@ -83,13 +83,19 @@ jobs:
         run: python scripts/build_dealflow.py
         timeout-minutes: 6
         continue-on-error: true
+      - name: Grid & DC (NESO registers, BNetzA/CRE tenders, TSO notices, data-centre news)
+        # once a day, morning full run only; ~20-40 s, keyless public sources; after Deal flow (reads data/dealflow.json)
+        if: env.MODE == 'full'
+        run: python scripts/build_griddc.py
+        timeout-minutes: 5
+        continue-on-error: true
       - name: Commit data back to this branch
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898333+github-actions[bot]@users.noreply.github.com"
           # only the files this run actually rewrote (steps can be skipped per schedule);
           # data/co/ holds the per-company detail files (new, changed and removed ones)
-          paths="data/market.json data/news.json data/power.json data/symbols.json data/companies.json data/co data/dealflow.json"
+          paths="data/market.json data/news.json data/power.json data/symbols.json data/companies.json data/co data/dealflow.json data/griddc.json data/griddc_state.json"
           st=$(git status --porcelain -uall -- $paths)
           if [ -z "$st" ]; then echo "No data changes"; exit 0; fi
           changed=$(echo "$st" | awk '$1!="D"{print $NF}')
